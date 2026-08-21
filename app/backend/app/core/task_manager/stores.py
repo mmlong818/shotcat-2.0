@@ -78,6 +78,7 @@ async def _resolve_navigation_targets(
         "consistency_check": "chapter",
         "script_optimization": "chapter",
         "script_simplification": "chapter",
+        "project_brain_extraction": "project",
     }
     shot_like_relation_types = {
         "video": "shot",

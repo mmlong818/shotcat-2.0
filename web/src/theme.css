@@ -520,7 +520,16 @@ img.zoomable{cursor:zoom-in}
 /* ── Shotcat 2.0 项目大脑 ── */
 .brain-page{max-width:1440px;margin:0 auto;padding-bottom:72px}
 .brain-head{align-items:flex-end;gap:28px}
+.brain-head-actions{display:flex;align-items:center;gap:8px}
 .brain-kicker{margin-bottom:7px;color:var(--gold-2);font-size:10px;font-weight:700;letter-spacing:.16em}
+.brain-task{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px 20px;
+  margin:0 24px 16px;padding:14px 16px 16px;overflow:hidden;border:1px solid var(--gold-line);border-radius:10px;background:var(--gold-soft)}
+.brain-task>div{display:flex;align-items:baseline;gap:10px;min-width:0}.brain-task strong{color:var(--text);font-size:12px}
+.brain-task>div span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-3);font-size:10.5px}
+.brain-task>b{color:var(--gold-2);font-size:12px;font-weight:650}.brain-task>i{grid-column:1/-1;height:2px;overflow:hidden;border-radius:2px;background:var(--border-soft)}
+.brain-task>i span{display:block;height:100%;border-radius:inherit;background:var(--gold);transition:width .2s ease}
+.brain-task.status-failed{border-color:rgba(196,91,91,.28);background:rgba(196,91,91,.08)}
+.brain-task.status-failed>b{color:var(--danger)}.brain-task.status-cancelled{border-color:var(--border-soft);background:var(--surface)}
 .brain-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;margin:0 24px 16px;overflow:hidden;
   border:1px solid var(--border-soft);border-radius:10px;background:var(--border-soft)}
 .brain-stats>div{min-height:76px;padding:15px 17px;background:var(--surface)}
@@ -560,4 +569,5 @@ img.zoomable{cursor:zoom-in}
 .brain-card footer button:hover:not(:disabled){border-color:var(--gold-line);color:var(--gold-2)}.brain-card footer button:last-child{margin-left:auto}
 .brain-card footer button:disabled,.brain-lock:disabled{cursor:wait;opacity:.5}.brain-card footer span{color:var(--text-3);font-size:9.5px}
 @media (max-width:900px){.brain-grid{grid-template-columns:1fr}.brain-compose-row{grid-template-columns:1fr 1fr}.brain-source{grid-column:1/-1}}
-@media (max-width:640px){.brain-stats{grid-template-columns:1fr 1fr;margin-inline:14px}.brain-compose,.brain-error,.brain-filter,.brain-grid{margin-inline:14px}.brain-compose-row{grid-template-columns:1fr}.brain-source{grid-column:auto}.brain-compose-actions{align-items:stretch;flex-direction:column}.brain-compose-actions button{width:100%}}
+@media (max-width:640px){.brain-head{align-items:stretch}.brain-head-actions{display:grid;grid-template-columns:1fr 1fr}.brain-head-actions .btn{width:100%}.brain-stats{grid-template-columns:1fr 1fr;margin-inline:14px}.brain-task,.brain-compose,.brain-error,.brain-filter,.brain-grid{margin-inline:14px}.brain-task>div{align-items:flex-start;flex-direction:column;gap:4px}.brain-task>div span{white-space:normal}.brain-compose-row{grid-template-columns:1fr}.brain-source{grid-column:auto}.brain-compose-actions{align-items:stretch;flex-direction:column}.brain-compose-actions button{width:100%}}
+@media (prefers-reduced-motion:reduce){.brain-task>i span{transition:none}}

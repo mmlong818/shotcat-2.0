@@ -7,18 +7,60 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db
-from app.models.studio import Project, ProjectBrainEntry
+from app.models.studio import Chapter, Project, ProjectBrainEntry
 from app.models.studio_project_brain import ProjectBrainCategory, ProjectBrainOrigin, ProjectBrainStatus
 from app.schemas.common import ApiResponse, created_response, empty_response, success_response
 from app.schemas.studio.project_brain import (
     ProjectBrainEntryCreate,
     ProjectBrainEntryRead,
     ProjectBrainEntryUpdate,
+    ProjectBrainExtractionTaskRead,
     ProjectBrainSummaryRead,
 )
 from app.services.common import entity_not_found, flush_and_refresh, get_or_404, patch_model
+from app.services.project_brain_tasks import create_project_brain_extraction_task
+from app.tasks.execute_task import enqueue_task_execution
 
 router = APIRouter()
+
+
+@router.post(
+    "/extractions",
+    response_model=ApiResponse[ProjectBrainExtractionTaskRead],
+    status_code=status.HTTP_201_CREATED,
+    summary="从完整剧本分析项目大脑候选",
+)
+async def create_project_brain_extraction(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[ProjectBrainExtractionTaskRead]:
+    project = await get_or_404(db, Project, project_id, detail=entity_not_found("Project"))
+    chapters = list((await db.execute(
+        select(Chapter).where(Chapter.project_id == project_id).order_by(Chapter.index, Chapter.id)
+    )).scalars().all())
+    sections = [
+        f"## 第 {chapter.index} 章：{chapter.title or '未命名'}\n{str(chapter.raw_text or '').strip()}"
+        for chapter in chapters
+        if str(chapter.raw_text or "").strip()
+    ]
+    if not sections:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="项目没有可分析的剧本文本")
+
+    task = await create_project_brain_extraction_task(
+        db,
+        project_id=project_id,
+        project_name=project.name,
+        script_text="\n\n".join(sections),
+    )
+    if not task.reused:
+        # 后台执行器使用独立数据库会话；先提交任务，避免本地快速启动时读不到尚未提交的记录。
+        await db.commit()
+        enqueue_task_execution(task.task_id)
+    return created_response(ProjectBrainExtractionTaskRead(
+        task_id=task.task_id,
+        status=task.status.value,
+        reused=task.reused,
+    ))
 
 
 async def _get_entry(db: AsyncSession, *, project_id: str, entry_id: str) -> ProjectBrainEntry:

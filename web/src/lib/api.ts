@@ -64,6 +64,7 @@ export interface ProjectBrainSummary {
   ai_drafts: number
   by_category: Partial<Record<ProjectBrainCategory, number>>
 }
+export interface ProjectBrainExtractionTaskCreated { task_id: string; status: string; reused: boolean }
 export interface Chapter { id: string; index: number; title: string; project_id: string; raw_text?: string }
 export interface Shot {
   id: string; index: number; chapter_id?: string; title?: string; status?: string; script_excerpt?: string
@@ -234,6 +235,12 @@ export const api = {
     get<ProjectBrainEntry[]>(`/studio/projects/${encodeURIComponent(projectId)}/brain`),
   projectBrainSummary: (projectId: string) =>
     get<ProjectBrainSummary>(`/studio/projects/${encodeURIComponent(projectId)}/brain/summary`),
+  createProjectBrainExtraction: (projectId: string) =>
+    post<ProjectBrainExtractionTaskCreated>(`/studio/projects/${encodeURIComponent(projectId)}/brain/extractions`, {}),
+  projectBrainExtractionTasks: (projectId: string) =>
+    get<Paged<TaskListItem>>(
+      `/film/tasks?task_kind=project_brain_extract&relation_type=project_brain_extraction&relation_entity_id=${encodeURIComponent(projectId)}&recent_seconds=86400&page=1&page_size=10`,
+    ).then((d) => d.items),
   createProjectBrainEntry: (projectId: string, body: Omit<ProjectBrainEntry, 'id' | 'project_id' | 'version'>) =>
     post<ProjectBrainEntry>(`/studio/projects/${encodeURIComponent(projectId)}/brain`, body),
   updateProjectBrainEntry: (projectId: string, entryId: string, patch: Partial<ProjectBrainEntry> & { expected_version: number }) =>

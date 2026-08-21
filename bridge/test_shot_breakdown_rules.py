@@ -383,6 +383,12 @@ def test_run_persists_source_director_design_and_structured_dialogue(monkeypatch
 
     def fake_req(method: str, path: str, body=None, timeout: int = 30):
         requests.append((method, path, copy.deepcopy(body)))
+        if method == "GET" and path.endswith("/brain?status=confirmed"):
+            return 200, {"data": [{
+                "category": "style",
+                "title": "视觉基调",
+                "content": "全片采用低饱和冷色，回忆段落除外。",
+            }]}
         return 201, {}
 
     monkeypatch.setattr(shot_breakdown, "items", fake_items)
@@ -393,6 +399,7 @@ def test_run_persists_source_director_design_and_structured_dialogue(monkeypatch
     shot_breakdown.run("project-1", "test-model")
 
     assert len(model_calls) == 2
+    assert all("全片采用低饱和冷色，回忆段落除外。" in call["user"] for call in model_calls)
     shot_body = next(body for method, path, body in requests if method == "POST" and path == "/studio/shots")
     assert shot_body["script_excerpt"] == "周诚走进旧宅。"
     detail_bodies = [body for method, path, body in requests if method == "POST" and path == "/studio/shot-details"]

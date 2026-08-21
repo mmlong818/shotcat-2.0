@@ -19,6 +19,7 @@ from app.models.studio import (
     Chapter,
     Character,
     ProjectPropLink,
+    ProjectBrainEntry,
     ProjectSceneLink,
     Prop,
     Scene,
@@ -67,6 +68,24 @@ def _enum_value(value: object | None) -> str:
 
 def _compact_text(value: str | None) -> str:
     return str(value or "").strip()
+
+
+def _build_project_brain_context(entries: list[ProjectBrainEntry]) -> str:
+    """把已确认项目规则压缩成可审计的提示词约束，不注入 AI 待确认内容。"""
+
+    lines: list[str] = []
+    total_length = 0
+    for entry in entries:
+        category = _enum_value(entry.category)
+        content = _compact_text(entry.content)[:500]
+        if not content:
+            continue
+        line = f"[{category}] {entry.title}：{content}"
+        if total_length + len(line) > 12000:
+            break
+        lines.append(line)
+        total_length += len(line)
+    return "\n".join(lines)
 
 
 _SPECIAL_CLOTHING_TERMS = (
@@ -897,6 +916,19 @@ async def build_run_args(
     visual_style = _enum_value(getattr(project, "visual_style", None))
     style = _enum_value(getattr(project, "style", None))
     unify_style = bool(getattr(project, "unify_style", True)) if project is not None else True
+    project_brain_context = ""
+    if project is not None:
+        brain_stmt = (
+            select(ProjectBrainEntry)
+            .where(
+                ProjectBrainEntry.project_id == project.id,
+                ProjectBrainEntry.status == "confirmed",
+            )
+            .order_by(ProjectBrainEntry.locked.desc(), ProjectBrainEntry.category, ProjectBrainEntry.title)
+        )
+        project_brain_context = _build_project_brain_context(
+            list((await db.execute(brain_stmt)).scalars().all())
+        )
 
     characters = [
         link.character
@@ -957,6 +989,7 @@ async def build_run_args(
             "visual_style": visual_style,
             "style": style,
             "unify_style": unify_style,
+            "project_brain_context": project_brain_context,
             "camera_shot": _enum_value(detail.camera_shot),
             "angle": _enum_value(detail.angle),
             "movement": _enum_value(detail.movement),

@@ -26,6 +26,7 @@ def _prepare_shot_frame_input(input_dict: dict[str, Any]) -> dict[str, Any]:
         "visual_style",
         "style",
         "unify_style",
+        "project_brain_context",
         "camera_shot",
         "angle",
         "movement",
@@ -72,6 +73,7 @@ _SHOT_FRAME_INPUT_VARS = [
     "visual_style",
     "style",
     "unify_style",
+    "project_brain_context",
     "camera_shot",
     "angle",
     "movement",
@@ -120,6 +122,7 @@ _SHOT_FRAME_TEMPLATE = """你是一名专业图像生成提示词设计师，需
 1. 必须继承项目级画面表现形式与题材风格：{visual_style} / {style}
 2. 项目是否要求统一风格：{unify_style}
 3. 若镜头信息不足，优先向项目风格与已确认实体设定收敛，不要自由发散到其他风格
+3.1 项目大脑中的已确认规则高于一般场景常识；不得与其中事实、空间关系或连续性约束冲突
 4. 当前镜头已确认的角色、场景、道具名称必须原样保留，不得翻译、不得改名、不得替换为同义词
 5. 不得输出“图1/图2”、不得输出“## 图片内容说明”；可以用自然语言写清角色、场景、道具在当前画面里的对应关系，但不要写技术性图片编号
 6. 输出必须是完整画面 Prompt：用于生成该镜头的关键帧，必须把【景别、视角、主体外貌与姿态、场景环境、光影、色彩、构图、质感】融合在一段流畅描述中
@@ -174,6 +177,9 @@ _SHOT_FRAME_TEMPLATE = """你是一名专业图像生成提示词设计师，需
 角色：{character_context}
 场景：{scene_context}
 道具：{prop_context}
+
+## 项目大脑已确认规则
+{project_brain_context}
 
 ## 相邻镜头空间参考（只用于统一可见空间、方向、材质和轴线，不得写入动作承接或未来变化）
 上一镜头标题：{previous_shot_title}

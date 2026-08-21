@@ -63,6 +63,7 @@ const PIPELINE_ROUTES: Record<PipelineStep, string> = {
 
 /** 把后端通用任务转换成用户能直接理解的步骤名称。 */
 const taskLabel = (task: TaskListItem) => {
+  if (task.task_kind === 'project_brain_extract') return '分析项目大脑'
   if (task.task_kind === 'shot_frame_prompt') return '生成镜头提示词'
   if (task.task_kind === 'image_generation') {
     return task.relation_type === 'shot_frame_image' ? '生成镜头图片' : '生成设定图片'
@@ -74,6 +75,7 @@ const taskLabel = (task: TaskListItem) => {
 
 /** 根据任务关联信息返回对应业务页面，供状态卡一键回跳。 */
 const taskRoute = (task: TaskListItem) => {
+  if (task.task_kind === 'project_brain_extract') return '/brain'
   if (task.task_kind === 'shot_frame_prompt' || task.relation_type === 'shot_frame_image') {
     const shotId = task.navigate_relation_entity_id
     return shotId ? `/frames?shot=${encodeURIComponent(shotId)}` : '/frames'

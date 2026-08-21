@@ -17,6 +17,7 @@ from app.chains.agents.character_portrait_analysis_agent import CharacterPortrai
 from app.chains.agents.prop_info_analysis_agent import PropInfoAnalysisAgent
 from app.chains.agents.scene_info_analysis_agent import SceneInfoAnalysisAgent
 from app.chains.agents.costume_info_analysis_agent import CostumeInfoAnalysisAgent
+from app.chains.agents.project_brain_extractor_agent import ProjectBrainExtractorAgent
 
 __all__ = [
     "AgentBase",
@@ -35,4 +36,5 @@ __all__ = [
     "PropInfoAnalysisAgent",
     "SceneInfoAnalysisAgent",
     "CostumeInfoAnalysisAgent",
+    "ProjectBrainExtractorAgent",
 ]

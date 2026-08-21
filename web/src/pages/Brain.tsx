@@ -6,7 +6,14 @@ import {
   type ProjectBrainEntry,
   type ProjectBrainOrigin,
   type ProjectBrainSummary,
+  type TaskListItem,
 } from '../lib/api'
+
+const ACTIVE_TASK_STATES = new Set(['pending', 'running', 'streaming'])
+const TASK_LABEL: Record<string, string> = {
+  pending: '等待分析', running: '正在通读全文', streaming: '正在整理候选',
+  succeeded: '全文分析完成', failed: '分析失败', cancelled: '分析已停止',
+}
 
 const CATEGORY_META: Record<ProjectBrainCategory, { label: string; note: string }> = {
   fact: { label: '原文事实', note: '剧本中明确写出的时间、人物和事件' },
@@ -38,15 +45,17 @@ export default function Brain({ project }: { project: Project | null }) {
   const [creating, setCreating] = useState(false)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
+  const [extractionTask, setExtractionTask] = useState<TaskListItem | null>(null)
 
   const load = useCallback(async () => {
     if (!project) return
     try {
-      const [nextEntries, nextSummary] = await Promise.all([
-        api.projectBrain(project.id), api.projectBrainSummary(project.id),
+      const [nextEntries, nextSummary, tasks] = await Promise.all([
+        api.projectBrain(project.id), api.projectBrainSummary(project.id), api.projectBrainExtractionTasks(project.id),
       ])
       setEntries(nextEntries)
       setSummary(nextSummary)
+      setExtractionTask(tasks[0] || null)
       setError('')
     } catch (e) {
       setError(e instanceof Error ? e.message : '项目大脑读取失败')
@@ -55,12 +64,61 @@ export default function Brain({ project }: { project: Project | null }) {
 
   useEffect(() => { void load() }, [load])
 
+  useEffect(() => {
+    if (!project || !extractionTask || !ACTIVE_TASK_STATES.has(extractionTask.status)) return
+    const timer = window.setInterval(async () => {
+      try {
+        const status = await api.taskStatus(extractionTask.task_id)
+        setExtractionTask((current) => current ? { ...current, ...status } : current)
+        if (!ACTIVE_TASK_STATES.has(status.status)) await load()
+      } catch (e) {
+        setError(e instanceof Error ? e.message : '分析状态读取失败')
+      }
+    }, 2500)
+    return () => window.clearInterval(timer)
+  }, [extractionTask?.task_id, extractionTask?.status, load, project?.id])
+
   const visibleEntries = useMemo(
     () => category === 'all' ? entries : entries.filter((item) => item.category === category),
     [category, entries],
   )
 
   if (!project) return <div className="center">请先选择项目</div>
+
+  const extractionActive = Boolean(extractionTask && ACTIVE_TASK_STATES.has(extractionTask.status))
+
+  const startExtraction = async () => {
+    setBusy('extract')
+    try {
+      const created = await api.createProjectBrainExtraction(project.id)
+      setExtractionTask({
+        task_id: created.task_id,
+        task_kind: 'project_brain_extract',
+        status: created.status,
+        progress: 0,
+        relation_type: 'project_brain_extraction',
+        relation_entity_id: project.id,
+      })
+      setError('')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '无法开始全文分析')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const stopExtraction = async () => {
+    if (!extractionTask) return
+    setBusy('stop-extract')
+    try {
+      const stopped = await api.cancelTask(extractionTask.task_id)
+      setExtractionTask((current) => current ? { ...current, status: stopped.status, cancel_requested: true } : current)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '停止分析失败')
+    } finally {
+      setBusy('')
+    }
+  }
 
   const createEntry = async () => {
     if (!form.title.trim() || !form.content.trim()) return
@@ -124,10 +182,29 @@ export default function Brain({ project }: { project: Project | null }) {
           <h1>项目大脑</h1>
           <p>把原文事实、用户决定和 AI 推断分开保存，后续拆镜头与生图只引用已确认规则。</p>
         </div>
-        <button className="btn primary" onClick={() => setCreating((value) => !value)}>
-          {creating ? '收起' : '新增规则'}
-        </button>
+        <div className="brain-head-actions">
+          <button className="btn" disabled={busy === 'extract' || busy === 'stop-extract'}
+            onClick={extractionActive ? stopExtraction : startExtraction}>
+            {extractionActive ? '停止分析' : entries.length ? '重新分析全文' : 'AI 分析全文'}
+          </button>
+          <button className="btn primary" onClick={() => setCreating((value) => !value)}>
+            {creating ? '收起' : '新增规则'}
+          </button>
+        </div>
       </div>
+
+      {extractionTask && (
+        <section className={`brain-task status-${extractionTask.status}`} aria-live="polite">
+          <div>
+            <strong>{TASK_LABEL[extractionTask.status] || extractionTask.status}</strong>
+            <span>{extractionActive ? '切换页面或刷新不会中断；分析结果会作为 AI 待确认候选写入。' :
+              extractionTask.status === 'succeeded' ? '候选已经落地，请逐条确认；未确认内容不会进入生图提示词。' :
+              extractionTask.status === 'failed' ? '本次结果没有覆盖已确认规则，可以重新分析。' : '已确认规则保持不变。'}</span>
+          </div>
+          <b>{Math.max(0, Math.min(100, extractionTask.progress || 0))}%</b>
+          <i><span style={{ width: `${Math.max(0, Math.min(100, extractionTask.progress || 0))}%` }} /></i>
+        </section>
+      )}
 
       <div className="brain-stats" aria-label="项目大脑概况">
         <div><b>{summary?.total ?? 0}</b><span>全部条目</span></div>

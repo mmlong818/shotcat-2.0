@@ -40,6 +40,7 @@ SYS = f"""你是拥有十年经验的网络动漫剧分镜师兼摄影指导。�
 - 空镜 action 必须以“空镜：”开头。不得凭常识添加手机、书包、雨伞、杯子等随身物件。
 - 不使用肩部遮挡或借肩构图；正反打采用干净单人镜头、平视轻侧面或双人关系镜头，并保持左右站位与视线。
 - reference_relations 只说明本镜头实际引用的角色、场景、道具分别锁定什么。
+- 项目大脑中的已确认规则是本项目的事实与创作约束，优先级高于一般场景常识；不得与其冲突，也不得把未确认候选当成事实。
 
 【镜头参数】
 - camera_shot 仅用 [{SHOTS}] 的英文代码，只输出 ECU/CU/MCU/MS/MLS/LS/ELS 之一，不得附加中文名。
@@ -67,6 +68,9 @@ USER_TMPL = """【拆分模式】标准模式
 【完整剧本】
 {script}
 
+【项目大脑已确认规则（高于一般场景常识，不得冲突）】
+{brain}
+
 【本项目场景（scene 字段须用这些名，并用描述建立空间锚点）】
 {scenes}
 【角色造型（名称必须原样用于 characters；每行含状态依据）】{chars}
@@ -88,11 +92,15 @@ REVIEW_SYS = f"""你是资深分镜质量控制导演。校验并直接修复输
 7. 画面可生成：description 是一张确定的静态画面；背面或遮挡人物不写不可见表情，大景别不靠细微表情传递信息。
 8. 资产准确：scene/characters/props 只能原样使用输入资产；道具仅在真实可见或互动时引用。
 9. 技术值：camera_shot 仅 [{SHOTS}]；angle 仅 [{ANGLES}] 且不用 OVER_SHOULDER；movement 仅 [{MOVES}]；构图禁用中心构图；剧本明确要求黑屏、黑场或淡出结束时，黑场是合法构图。
+10. 项目事实：逐镜检查是否遵守项目大脑已确认规则；这些规则高于一般常识，不得为了修复其他问题而改写或绕过。
 
 不要降低镜头数量来规避问题，不要添加原文没有的剧情。只输出 JSON：{{"shots":[...]}}。"""
 
 REVIEW_USER_TMPL = """【完整剧本】
 {script}
+
+【项目大脑已确认规则（高于一般场景常识，不得冲突）】
+{brain}
 
 【场景资产】
 {scenes}
@@ -538,6 +546,7 @@ def _generate_reviewed_shots(
     scene_context: str,
     character_context: str,
     prop_context: str,
+    brain_context: str,
     scene_names: set[str],
     character_names: set[str],
     prop_names: set[str],
@@ -550,6 +559,7 @@ def _generate_reviewed_shots(
         scenes=scene_context,
         chars=character_context,
         props=prop_context,
+        brain=brain_context,
     ), model=model, temperature=0.45, timeout=300)
     shots = _stabilize_continuity_truth(_normalize_shots(draft.get("shots", [])))
     if not shots:
@@ -567,6 +577,7 @@ def _generate_reviewed_shots(
         scenes=scene_context,
         chars=character_context,
         props=prop_context,
+        brain=brain_context,
         issues="\n".join(f"- {item}" for item in initial_issues) or "- 未发现程序可判定的问题；仍需做空间与镜头语言专业复核",
         draft=json.dumps({"shots": shots}, ensure_ascii=False),
     ), model=model, temperature=0.2, timeout=300)
@@ -589,6 +600,7 @@ def _repair_reviewed_shots(
     scene_context: str,
     character_context: str,
     prop_context: str,
+    brain_context: str,
     scene_names: set[str],
     character_names: set[str],
     prop_names: set[str],
@@ -616,6 +628,7 @@ def _repair_reviewed_shots(
             scenes=scene_context,
             chars=character_context,
             props=prop_context,
+            brain=brain_context,
             issues="\n".join(f"- {item}" for item in issues),
             draft=json.dumps({"shots": shots}, ensure_ascii=False),
         ),
@@ -676,6 +689,8 @@ def run(pid: str, model: str, *, repair: bool = False):
     scenes = items(f"/studio/entities/scene?project_id={pid}&page_size=100")
     chars = items(f"/studio/entities/character?project_id={pid}&page_size=100")
     props = items(f"/studio/entities/prop?project_id={pid}&page_size=100")
+    brain_status, brain_response = _req("GET", f"/studio/projects/{pid}/brain?status=confirmed")
+    brain_entries = brain_response.get("data", []) if brain_status < 400 else []
     scene_id_by_name = {s["name"]: s["id"] for s in scenes}
     char_id_by_name = {c["name"]: c["id"] for c in chars}
     prop_id_by_name = {p["name"]: p["id"] for p in props}
@@ -689,14 +704,24 @@ def run(pid: str, model: str, *, repair: bool = False):
     prop_context = "\n".join(
         f"- {prop['name']}：{_text(prop.get('description')).replace(chr(10), ' ')}" for prop in props
     ) or "（无已确认道具）"
+    brain_context = "\n".join(
+        f"- [{_text(entry.get('category')) or 'fact'}] {_text(entry.get('title'))}："
+        f"{_text(entry.get('content')).replace(chr(10), ' ')}"
+        for entry in brain_entries
+        if isinstance(entry, dict) and _text(entry.get("content"))
+    ) or "（暂无已确认项目规则）"
 
-    print(f"[镜头级分镜] 项目 {pid}｜章节 {ch['id']}｜场景 {len(scenes)}｜模型 {model}")
+    print(
+        f"[镜头级分镜] 项目 {pid}｜章节 {ch['id']}｜场景 {len(scenes)}｜"
+        f"项目规则 {len(brain_entries)}｜模型 {model}"
+    )
     pending_path = Path(__file__).with_name(f"shots-repair-{pid}.json")
     common_args = {
         "script": script,
         "scene_context": scene_context,
         "character_context": character_context,
         "prop_context": prop_context,
+        "brain_context": brain_context,
         "scene_names": set(scene_id_by_name),
         "character_names": set(char_id_by_name),
         "prop_names": set(prop_id_by_name),

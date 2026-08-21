@@ -50,9 +50,35 @@ class ProjectBrainSummaryRead(BaseModel):
     by_category: dict[str, int]
 
 
+class ProjectBrainExtractionCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    category: ProjectBrainCategory
+    title: str = Field(..., min_length=1, max_length=255)
+    content: str = Field(..., min_length=1)
+    source_ref: str = Field("", max_length=512)
+    evidence: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ProjectBrainExtractionResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    entries: list[ProjectBrainExtractionCandidate] = Field(default_factory=list, max_length=120)
+    analysis_note: str = Field("", max_length=2000)
+
+
+class ProjectBrainExtractionTaskRead(BaseModel):
+    task_id: str
+    status: str
+    reused: bool = False
+
+
 __all__ = [
     "ProjectBrainEntryCreate",
     "ProjectBrainEntryUpdate",
     "ProjectBrainEntryRead",
     "ProjectBrainSummaryRead",
+    "ProjectBrainExtractionCandidate",
+    "ProjectBrainExtractionResult",
+    "ProjectBrainExtractionTaskRead",
 ]
