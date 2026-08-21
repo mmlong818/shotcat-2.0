@@ -1,0 +1,38 @@
+/* 猫叔的短剧工作台 · 暗色专业创作台 全局皮肤
+   仅外观层，不改业务组件结构。配合 main.tsx 的 darkAlgorithm + token。 */
+
+:root {
+  --bg:#0d0f12; --surface:#16191e; --surface-2:#1c2027; --surface-3:#22272f;
+  --border:#282e37; --border-soft:#1f242b;
+  --text:#eceef1; --text-2:#9aa3af; --text-3:#5f6875;
+  --accent:#e8a33d; --accent-2:#f0b862; --accent-soft:rgba(232,163,61,.12);
+  --success:#4ea87b; --info:#5a8fd1; --danger:#d16a5a;
+  --r:10px;
+  --font:"Inter","DM Sans","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+}
+
+/* 布局暗底 */
+.ant-layout, .ant-layout-content { background: var(--bg); }
+.ant-layout-header { background: var(--surface); border-bottom: 1px solid var(--border-soft); }
+.ant-layout-sider { background: var(--surface) !important; border-right: 1px solid var(--border-soft); }
+
+/* 卡片：暗面 + 极克制边框，靠明度分层 */
+.ant-card { background: var(--surface); border-color: var(--border); border-radius: var(--r); }
+.ant-card-head { border-bottom-color: var(--border); }
+
+/* 侧栏菜单选中态：琥珀 */
+.ant-menu-item-selected { background: var(--accent-soft) !important; color: var(--accent) !important; }
+
+/* 表头/表体暗化 */
+.ant-table { background: transparent; }
+.ant-table-thead > tr > th { background: var(--surface-2); color: var(--text-2); border-color: var(--border); }
+.ant-table-tbody > tr > td { border-color: var(--border-soft); }
+
+/* 强调色只用于主操作与关键态，不铺满 */
+.ant-btn-primary { color: #1a1205; font-weight: 600; box-shadow: none; }

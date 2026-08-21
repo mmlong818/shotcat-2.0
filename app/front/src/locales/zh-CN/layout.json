@@ -1,0 +1,17 @@
+{
+  "title": "猫叔的短剧工作台",
+  "subtitle": "AI 短剧生产",
+  "welcome": "欢迎使用 猫叔的短剧工作台",
+  "menu": {
+    "settings": "系统设置"
+  },
+  "user": {
+    "profile": "个人中心",
+    "logout": "退出登录"
+  },
+  "lang": {
+    "zh": "简体中文",
+    "en": "English"
+  }
+}
+

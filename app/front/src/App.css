@@ -1,0 +1,66 @@
+/* App-specific styles */
+.app-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 2rem 0;
+  margin-bottom: 2rem;
+  border-radius: 8px;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.feature-card {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.feature-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+/* 暗色专业创作台：交由 antd 琥珀 token 接管，去除遗留蓝色硬编码 */
+.ant-card {
+  border: 1px solid #282e37;
+}
+
+.ant-btn-primary {
+  background: #e8a33d;
+  border-color: #e8a33d;
+  color: #1a1205;
+}
+
+.ant-btn-primary:hover {
+  background: #f0b862 !important;
+  border-color: #f0b862 !important;
+  color: #1a1205 !important;
+}
+
+/* Project workbench: tab 选中态主色下划线（琥珀） */
+.project-workbench-tabs.ant-tabs .ant-tabs-ink-bar {
+  background: #e8a33d;
+  height: 3px;
+}
+.project-workbench-tabs.ant-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #e8a33d;
+  font-weight: 600;
+}
+.project-workbench-tabs.ant-tabs .ant-tabs-tab:hover .ant-tabs-tab-btn {
+  color: #f0b862;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fadeIn {
+  animation: fadeIn 0.25s ease-out;
+}
+

@@ -1,0 +1,62 @@
+# 密钥/凭证（绝不入库）
+app/deploy/compose/.env
+screenwriter/.glm_key
+**/*.key
+
+# 生成产物
+screenwriter/*generated*.json
+generated-story-bible.json
+
+# Python
+__pycache__/
+*.pyc
+
+# 依赖/构建
+node_modules/
+*.tsbuildinfo
+bridge/.glm_key
+bridge/.openai_key
+bridge/visual-dict-*.json
+
+# app/ 后端内核（已并入本仓库，作为项目自有代码维护）
+# —— 仅忽略其运行产物与密钥（app/deploy/compose/.env 已在上方忽略）
+app/**/node_modules/
+app/**/__pycache__/
+app/**/dist/
+app/**/.env
+
+# 备份归档
+/_archive/
+
+# 内部规划、设计过程与历史资料（仅保留本机）
+/CLAUDE.md
+/PLAN.md
+/RESUME.md
+/design/
+/knowledge/
+/app/.cursor/
+/app/.github/
+/app/.githooks/
+/app/AGENTS.md
+/app/README.md
+/app/docs/
+/app/site/
+/app/front/GETTING_STARTED.md
+/app/front/PROJECT_SUMMARY.md
+/app/front/README.md
+/bridge/sample-story-bible.json
+/bridge/story-echo.json
+/bridge/verify2.py
+/bridge/verify_echo.py
+
+# 生成产物
+bridge/units-*.json
+bridge/shots-*.json
+
+# 本地运行数据与日志
+app/backend/jellyfish.db*
+app/backend/local-storage/
+jellyfish.db*
+bridge/*.log
+web/*.log
+.tmp-openapi.json

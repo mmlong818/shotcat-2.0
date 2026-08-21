@@ -1,0 +1,17 @@
+{
+  "title": "Jellyfish",
+  "subtitle": "AI Short-form Studio",
+  "welcome": "Welcome to Jellyfish",
+  "menu": {
+    "settings": "Settings"
+  },
+  "user": {
+    "profile": "Profile",
+    "logout": "Logout"
+  },
+  "lang": {
+    "zh": "简体中文",
+    "en": "English"
+  }
+}
+
