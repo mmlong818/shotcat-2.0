@@ -11,6 +11,7 @@ from app.models.types import ChapterStatus, ProjectStyle, ProjectVisualStyle
 
 if TYPE_CHECKING:
     from app.models.studio_assets import Actor, Character, Costume, Prop, Scene
+    from app.models.studio_project_brain import ProjectBrainEntry
     from app.models.studio_shots import Shot
 
 
@@ -78,6 +79,12 @@ class Project(Base, TimestampMixin):
         cascade="all, delete-orphan",
         passive_deletes=True,
         order_by="ProjectCostumeLink.id",
+    )
+    brain_entries: Mapped[list["ProjectBrainEntry"]] = relationship(
+        back_populates="project",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="ProjectBrainEntry.created_at",
     )
 
     __table_args__ = (

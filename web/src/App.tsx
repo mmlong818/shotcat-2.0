@@ -8,23 +8,26 @@ import Lobby from './pages/Lobby'
 import Overview from './pages/Overview'
 import Script from './pages/Script'
 import Gallery from './pages/Gallery'
+import Brain from './pages/Brain'
 import ModelSetupGate from './ModelSetupGate'
 import TaskActivity from './TaskActivity'
 
 const STAGES = [
   { key: 'script', label: '剧本', to: '/script' },
+  { key: 'brain', label: '大脑', to: '/brain' },
   { key: 'cast', label: '设定', to: '/cast' },
   { key: 'board', label: '分镜', to: '/board' },
   { key: 'frames', label: '画面', to: '/frames' },
   { key: 'gallery', label: '总览', to: '/gallery' },
 ]
-const STAGE_PATHS = ['/script', '/cast', '/board', '/frames', '/gallery', '/settings']
+const STAGE_PATHS = ['/script', '/brain', '/cast', '/board', '/frames', '/gallery', '/settings']
 
 function Icon({ name }: { name: string }) {
   const p: Record<string, JSX.Element> = {
     home: <g><path d="M3 11l9-7 9 7" /><path d="M5 10v10h14V10" /></g>,
     overview: <g><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></g>,
     script: <path d="M5 3h9l5 5v13H5zM14 3v5h5" />,
+    brain: <g><path d="M9 4a3 3 0 0 0-5 2.2A3.5 3.5 0 0 0 5 12a3.5 3.5 0 0 0 4 5.7V20" /><path d="M15 4a3 3 0 0 1 5 2.2A3.5 3.5 0 0 1 19 12a3.5 3.5 0 0 1-4 5.7V20M9 4v16M15 4v16M9 8h6M9 14h6" /></g>,
     cast: <g><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></g>,
     board: <g><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M9 4v16" /></g>,
     frames: <g><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h4v10M17 5v14h4M7 5v4" /></g>,
@@ -148,7 +151,7 @@ export default function App() {
         <div className="brand" style={{ cursor: 'pointer' }} onClick={() => navigate('/projects')} title="返回作品库">
           <span className="dot" />
           <span>shotcat</span>
-          <span className="brand-sub">短剧工作台</span>
+          <span className="brand-sub">短剧工作台 · 2.0</span>
         </div>
         {!onLobby && (
           <span className="crumb">
@@ -206,6 +209,7 @@ export default function App() {
           }} />} />
           <Route path="/board" element={<Storyboard project={project} />} />
           <Route path="/script" element={<Script project={project} />} />
+          <Route path="/brain" element={<Brain project={project} />} />
           <Route path="/cast" element={<Cast project={project} />} />
           <Route path="/frames" element={<Frames project={project} />} />
           <Route path="/gallery" element={<Gallery project={project} />} />

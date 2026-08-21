@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mmlong818/shotcat"><img src="https://img.shields.io/badge/version-0.2.5-C8923E" alt="版本 0.2.5"></a>
+  <img src="https://img.shields.io/badge/version-2.0.0-C8923E" alt="版本 2.0.0">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-6B7280" alt="PolyForm Noncommercial 许可证"></a>
   <a href="https://github.com/mmlong818/shotcat/commits/master"><img src="https://img.shields.io/github/last-commit/mmlong818/shotcat?label=last%20commit" alt="最近提交"></a>
   <a href="https://github.com/mmlong818/shotcat/stargazers"><img src="https://img.shields.io/github/stars/mmlong818/shotcat?style=flat&label=stars" alt="GitHub Stars"></a>
@@ -19,7 +19,7 @@
 
 面向短剧、漫剧和剧情图像制作的本地工作台。`plotcat` 负责剧本创作，`shotcat` 负责把剧本转化为可确认、可追踪、可批量生成的角色、场景、道具、分镜与关键帧。
 
-当前版本：**0.2.5**
+当前版本：**2.0.0（独立开发版）**
 
 ## 产品界面
 

@@ -1,7 +1,8 @@
-"""健康检查（v1 内）。"""
+"""健康检查。"""
 
 from fastapi import APIRouter
 
+from app import __version__
 from app.schemas.common import ApiResponse, success_response
 
 router = APIRouter()
@@ -9,4 +10,4 @@ router = APIRouter()
 
 @router.get("/health", response_model=ApiResponse[dict])
 async def v1_health() -> ApiResponse[dict]:
-    return success_response(data={"status": "ok", "version": "v1"})
+    return success_response(data={"status": "ok", "version": __version__})

@@ -5,6 +5,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+
+from app import __version__
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -85,7 +87,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.2.5",
+    version=__version__,
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",

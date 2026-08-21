@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mmlong818/shotcat"><img src="https://img.shields.io/badge/version-0.2.5-C8923E" alt="Version 0.2.5"></a>
+  <img src="https://img.shields.io/badge/version-2.0.0-C8923E" alt="Version 2.0.0">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-6B7280" alt="PolyForm Noncommercial License"></a>
   <a href="https://github.com/mmlong818/shotcat/commits/master"><img src="https://img.shields.io/github/last-commit/mmlong818/shotcat?label=last%20commit" alt="Last commit"></a>
   <a href="https://github.com/mmlong818/shotcat/stargazers"><img src="https://img.shields.io/github/stars/mmlong818/shotcat?style=flat&label=stars" alt="GitHub Stars"></a>
@@ -19,7 +19,7 @@
 
 A local-first workspace for short dramas, motion comics, and narrative image production. `plotcat` handles screenwriting; `shotcat` turns scripts into reviewable and traceable characters, scenes, props, storyboards, and keyframes that can be generated in batches.
 
-Current version: **0.2.5**
+Current version: **2.0.0 (independent development build)**
 
 ## Product UI
 

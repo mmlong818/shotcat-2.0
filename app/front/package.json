@@ -1,7 +1,7 @@
 {
   "name": "jellyfish-frontend",
   "private": true,
-  "version": "0.2.5",
+  "version": "2.0.0",
   "packageManager": "pnpm@9.15.9",
   "type": "module",
   "scripts": {

@@ -8,6 +8,7 @@ from app.api.v1.routes.studio import (
     files,
     image_tasks,
     projects,
+    project_brain,
     prompts,
     shots,
     timeline,
@@ -17,6 +18,7 @@ from app.api.v1.routes.studio import (
 router = APIRouter()
 
 router.include_router(projects.router, prefix="/projects", tags=["studio/projects"])
+router.include_router(project_brain.router, prefix="/projects/{project_id}/brain", tags=["studio/project-brain"])
 router.include_router(chapters.router, prefix="/chapters", tags=["studio/chapters"])
 
 router.include_router(shots.router, prefix="/shots", tags=["studio/shots"])

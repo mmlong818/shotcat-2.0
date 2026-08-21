@@ -13,6 +13,7 @@ __pycache__/
 
 # 依赖/构建
 node_modules/
+web/dist/
 *.tsbuildinfo
 bridge/.glm_key
 bridge/.openai_key

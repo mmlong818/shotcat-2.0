@@ -17,6 +17,12 @@ from app.models.studio_asset_images import (
 )
 from app.models.studio_prompts_files_timeline import FileItem, PromptTemplate, TimelineClip
 from app.models.studio_file_usages import FileUsage
+from app.models.studio_project_brain import (
+    ProjectBrainCategory,
+    ProjectBrainEntry,
+    ProjectBrainOrigin,
+    ProjectBrainStatus,
+)
 from app.models.studio_projects import (
     Chapter,
     Project,
@@ -77,8 +83,12 @@ __all__ = [
     "DialogueLineMode",
     "VFXType",
     "PromptCategory",
+    "ProjectBrainCategory",
+    "ProjectBrainOrigin",
+    "ProjectBrainStatus",
     # Models
     "Project",
+    "ProjectBrainEntry",
     "Chapter",
     "Scene",
     "Prop",

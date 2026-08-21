@@ -41,6 +41,29 @@ async function put<T = any>(path: string, body: any): Promise<T> {
 }
 
 export interface Project { id: string; name: string; description?: string; style?: string; visual_style?: string; progress?: number; default_video_ratio?: string }
+export type ProjectBrainCategory = 'fact' | 'character' | 'environment' | 'prop' | 'style' | 'narrative' | 'continuity'
+export type ProjectBrainOrigin = 'source' | 'user' | 'ai'
+export type ProjectBrainStatus = 'draft' | 'confirmed' | 'rejected'
+export interface ProjectBrainEntry {
+  id: string
+  project_id: string
+  category: ProjectBrainCategory
+  title: string
+  content: string
+  origin: ProjectBrainOrigin
+  status: ProjectBrainStatus
+  source_ref: string
+  evidence: Record<string, unknown>[]
+  locked: boolean
+  version: number
+}
+export interface ProjectBrainSummary {
+  total: number
+  confirmed: number
+  locked: number
+  ai_drafts: number
+  by_category: Partial<Record<ProjectBrainCategory, number>>
+}
 export interface Chapter { id: string; index: number; title: string; project_id: string; raw_text?: string }
 export interface Shot {
   id: string; index: number; chapter_id?: string; title?: string; status?: string; script_excerpt?: string
@@ -207,6 +230,27 @@ export const api = {
   saveInitialModelSetup: (body: { text?: InitialModelConnection; image?: InitialModelConnection }) =>
     put<InitialModelSetupStatus>('/llm/initial-setup', body),
   projects: () => get<Paged<Project>>('/studio/projects?page_size=100').then((d) => d.items),
+  projectBrain: (projectId: string) =>
+    get<ProjectBrainEntry[]>(`/studio/projects/${encodeURIComponent(projectId)}/brain`),
+  projectBrainSummary: (projectId: string) =>
+    get<ProjectBrainSummary>(`/studio/projects/${encodeURIComponent(projectId)}/brain/summary`),
+  createProjectBrainEntry: (projectId: string, body: Omit<ProjectBrainEntry, 'id' | 'project_id' | 'version'>) =>
+    post<ProjectBrainEntry>(`/studio/projects/${encodeURIComponent(projectId)}/brain`, body),
+  updateProjectBrainEntry: (projectId: string, entryId: string, patch: Partial<ProjectBrainEntry> & { expected_version: number }) =>
+    fetch(`${BASE}/studio/projects/${encodeURIComponent(projectId)}/brain/${encodeURIComponent(entryId)}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
+    }).then(async (r) => {
+      const j = await r.json().catch(() => null)
+      if (!r.ok) throw new Error(j?.message || `更新失败 ${r.status}`)
+      return (j?.data ?? j) as ProjectBrainEntry
+    }),
+  deleteProjectBrainEntry: (projectId: string, entryId: string) =>
+    fetch(`${BASE}/studio/projects/${encodeURIComponent(projectId)}/brain/${encodeURIComponent(entryId)}`, {
+      method: 'DELETE',
+    }).then(async (r) => {
+      const j = await r.json().catch(() => null)
+      if (!r.ok) throw new Error(j?.message || `删除失败 ${r.status}`)
+    }),
   createProject: (body: { name: string; style: string; visual_style: string; default_video_ratio?: string; description?: string }) => {
     const id = 'proj_' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36)
     return post<Project>('/studio/projects', { id, description: '', ...body }).then(() => id)
