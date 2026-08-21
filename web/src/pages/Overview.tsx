@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, type Project } from '../lib/api'
+import { api, type Project, type WorkflowInvalidation, type WorkflowRevision } from '../lib/api'
 
 type Stats = { chapters: number; character: number; scene: number; prop: number; costume: number; actor: number; shots: number }
 
 const STAGES: { to: string; label: string; desc: string; icon: string; main?: boolean }[] = [
   { to: '/script', label: '剧本', desc: '接原点产出 · 分集正文', icon: 'script' },
+  { to: '/brain', label: '大脑', desc: '确认项目事实 · 锁定创作规则', icon: 'brain' },
   { to: '/cast', label: '设定', desc: '角色/场景/道具/服装 + 造型图', icon: 'cast' },
   { to: '/board', label: '分镜', desc: '镜头级时序 · 景别机位', icon: 'board', main: true },
   { to: '/frames', label: '画面', desc: '关键帧 · 生图', icon: 'frames' },
@@ -15,6 +16,7 @@ const STAGES: { to: string; label: string; desc: string; icon: string; main?: bo
 function SIcon({ n }: { n: string }) {
   const p: Record<string, JSX.Element> = {
     script: <path d="M5 3h9l5 5v13H5zM14 3v5h5" />,
+    brain: <g><path d="M9 4a3 3 0 0 0-5 2.2A3.5 3.5 0 0 0 5 12a3.5 3.5 0 0 0 4 5.7V20" /><path d="M15 4a3 3 0 0 1 5 2.2A3.5 3.5 0 0 1 19 12a3.5 3.5 0 0 1-4 5.7V20M9 4v16M15 4v16M9 8h6M9 14h6" /></g>,
     cast: <g><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></g>,
     board: <g><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M9 4v16" /></g>,
     frames: <g><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h4v10M17 5v14h4M7 5v4" /></g>,
@@ -26,6 +28,8 @@ function SIcon({ n }: { n: string }) {
 export default function Overview({ project, onRatioChange }: { project: Project | null; onRatioChange?: (r: string) => void }) {
   const [st, setSt] = useState<Stats | null>(null)
   const [err, setErr] = useState(false)
+  const [invalidations, setInvalidations] = useState<WorkflowInvalidation[]>([])
+  const [revisions, setRevisions] = useState<WorkflowRevision[]>([])
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -39,10 +43,14 @@ export default function Overview({ project, onRatioChange }: { project: Project 
       api.entities('prop', pid).catch(() => []),
       api.entities('costume', pid).catch(() => []),
       api.entities('actor', pid).catch(() => []),
-    ]).then(async ([chs, ch, sc, pr, co, ac]) => {
+      api.workflowInvalidations(pid).catch(() => []),
+      api.workflowRevisions(pid).catch(() => []),
+    ]).then(async ([chs, ch, sc, pr, co, ac, stale, history]) => {
       let shots = 0
       for (const c of chs) shots += (await api.shots(c.id).catch(() => [])).length
       setSt({ chapters: chs.length, character: ch.length, scene: sc.length, prop: pr.length, costume: co.length, actor: ac.length, shots })
+      setInvalidations(stale)
+      setRevisions(history)
     }).catch(() => setErr(true))
   }, [project?.id])
 
@@ -52,6 +60,17 @@ export default function Overview({ project, onRatioChange }: { project: Project 
     { k: '集数', v: st.chapters }, { k: '角色', v: st.character }, { k: '场景', v: st.scene },
     { k: '道具', v: st.prop }, { k: '服装', v: st.costume }, { k: '镜头', v: st.shots },
   ] : []
+
+  const downloadRevision = async (revision: WorkflowRevision) => {
+    const payload = await api.workflowRevisionSnapshot(project.id, revision.id)
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${project.name}-${revision.source_step}-v${revision.revision}.json`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="work">
@@ -83,6 +102,39 @@ export default function Overview({ project, onRatioChange }: { project: Project 
         ))}
         {!st && <div className="muted">{err ? '统计加载失败' : '统计加载中…'}</div>}
       </div>
+
+      {invalidations.length > 0 && (
+        <section className="ov-impact" aria-label="需要重新确认的步骤">
+          <div className="ov-impact-head">
+            <div><strong>上游内容已变化</strong><span>旧结果仍然保留，但需要按顺序重新确认。</span></div>
+            <b>{invalidations.length}</b>
+          </div>
+          {invalidations.map((item) => {
+            const route = item.downstream_step === 'brain' ? '/brain'
+              : item.downstream_step === 'cast' ? '/cast'
+              : item.downstream_step === 'storyboard' ? '/board'
+              : item.downstream_step === 'frames' ? '/frames' : '/gallery'
+            return <button key={item.id} type="button" className="ov-impact-row" onClick={() => navigate(route)}>
+              <span>{item.reason}</span><em>{item.affected_count} 项</em><i>前往处理 →</i>
+            </button>
+          })}
+        </section>
+      )}
+
+      {revisions.length > 0 && (
+        <section className="ov-history" aria-label="项目版本记录">
+          <div className="ov-history-head"><strong>版本记录</strong><span>系统在重做前自动保存，可导出完整数据快照。</span></div>
+          <div className="ov-history-list">
+            {revisions.slice(0, 6).map((revision) => (
+              <button key={revision.id} type="button" className="ov-history-row" onClick={() => void downloadRevision(revision)}>
+                <span>{revision.reason || `${revision.source_step} 重做前保存`}</span>
+                <em>{revision.source_step} · v{revision.revision}</em>
+                <i>导出快照 ↓</i>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="ov-stages-h">进入创作阶段</div>
       <div className="ov-stages">

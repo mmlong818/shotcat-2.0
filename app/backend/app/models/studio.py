@@ -23,6 +23,7 @@ from app.models.studio_project_brain import (
     ProjectBrainOrigin,
     ProjectBrainStatus,
 )
+from app.models.studio_workflow import ProjectWorkflowInvalidation, ProjectWorkflowRevision
 from app.models.studio_projects import (
     Chapter,
     Project,
@@ -86,6 +87,8 @@ __all__ = [
     "ProjectBrainCategory",
     "ProjectBrainOrigin",
     "ProjectBrainStatus",
+    "ProjectWorkflowRevision",
+    "ProjectWorkflowInvalidation",
     # Models
     "Project",
     "ProjectBrainEntry",

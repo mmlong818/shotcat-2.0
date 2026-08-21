@@ -12,6 +12,7 @@ from app.api.v1.routes.studio import (
     prompts,
     shots,
     timeline,
+    workflow,
     shot_character_links,
 )
 
@@ -19,6 +20,7 @@ router = APIRouter()
 
 router.include_router(projects.router, prefix="/projects", tags=["studio/projects"])
 router.include_router(project_brain.router, prefix="/projects/{project_id}/brain", tags=["studio/project-brain"])
+router.include_router(workflow.router, prefix="/projects/{project_id}/workflow", tags=["studio/workflow"])
 router.include_router(chapters.router, prefix="/chapters", tags=["studio/chapters"])
 
 router.include_router(shots.router, prefix="/shots", tags=["studio/shots"])

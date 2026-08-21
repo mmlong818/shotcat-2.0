@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -60,6 +61,10 @@ class Shot(Base,TimestampMixin):
         comment="最近一次完成信息提取的时间；用于区分未提取与提取结果为空",
     )
     script_excerpt: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="剧本摘录")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, comment="镜头记录版本")
+    source_chapter_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, comment="拆镜头时使用的剧本版本")
+    is_stale: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True, comment="是否因上游变更而待重做")
+    stale_reason: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="待重做原因")
     generated_video_file_id: Mapped[str | None] = mapped_column(
         String(64),
         ForeignKey("files.id", ondelete="SET NULL"),
@@ -215,6 +220,13 @@ class ShotDetail(Base,TimestampMixin):
     key_frame_prompt: Mapped[str] = mapped_column(
         Text, nullable=False, default="", comment="镜头分镜关键帧提示词",
     )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, comment="镜头设计版本")
+    prompt_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, comment="画面提示词版本")
+    narrative_function: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="镜头叙事目的")
+    continuity_from_previous: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="与前镜连续性")
+    transition_from_previous: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="与前镜转场关系")
+    sound_effects: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="镜头声音设计")
+    reference_relations: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="资产引用关系")
 
     shot: Mapped["Shot"] = relationship(back_populates="detail")
     scene: Mapped["Scene | None"] = relationship()
@@ -273,6 +285,10 @@ class ShotFrameImage(Base, TimestampMixin):
     width: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="宽（px）")
     height: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="高（px）")
     format: Mapped[str] = mapped_column(String(32), nullable=False, default="png", comment="格式")
+    shot_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, comment="生成时使用的镜头版本")
+    prompt_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, comment="生成时使用的提示词版本")
+    asset_versions: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict, comment="生成时使用的资产版本")
+    is_stale: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True, comment="是否因上游变化而失效")
 
     shot_detail: Mapped["ShotDetail"] = relationship(back_populates="frame_images")
 

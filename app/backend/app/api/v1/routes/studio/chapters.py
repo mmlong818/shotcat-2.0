@@ -22,6 +22,7 @@ from app.services.common import (
     require_entity,
 )
 from app.schemas.studio.projects import ChapterCreate, ChapterRead, ChapterUpdate
+from app.services.studio.workflow import capture_revision
 
 router = APIRouter()
 
@@ -141,6 +142,14 @@ async def update_chapter(
             detail=entity_not_found("Project"),
             status_code=400,
         )
+    if "raw_text" in update and update["raw_text"] != obj.raw_text:
+        await capture_revision(
+            db,
+            project_id=obj.project_id,
+            source_step="script",
+            reason=f"编辑剧本章节《{obj.title}》前自动保存",
+        )
+        obj.version += 1
     patch_model(obj, update)
     await flush_and_refresh(db, obj)
     return success_response(ChapterRead.model_validate(obj))

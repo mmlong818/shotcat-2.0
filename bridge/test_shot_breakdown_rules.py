@@ -161,6 +161,9 @@ def test_pipeline_forces_utf8_for_child_process_logs(monkeypatch) -> None:
             return None
 
     monkeypatch.setattr(pipeline_server.subprocess, "Popen", FakeProcess)
+    monkeypatch.setattr(pipeline_server, "_capture_revision", lambda *args: "revision-1")
+    monkeypatch.setattr(pipeline_server, "_complete_step", lambda *args: None)
+    monkeypatch.setattr(pipeline_server, "_persist_jobs_locked", lambda: None)
     pipeline_server.JOBS.clear()
     pipeline_server.PROCESSES.clear()
     pipeline_server.JOBS["job-1"] = {
@@ -195,6 +198,8 @@ def test_pipeline_waits_for_confirmation_and_resumes_same_job(monkeypatch) -> No
             return None
 
     monkeypatch.setattr(pipeline_server.subprocess, "Popen", RepairRequiredProcess)
+    monkeypatch.setattr(pipeline_server, "_capture_revision", lambda *args: "revision-2")
+    monkeypatch.setattr(pipeline_server, "_persist_jobs_locked", lambda: None)
     pipeline_server.JOBS.clear()
     pipeline_server.PROCESSES.clear()
     pipeline_server.JOBS["job-2"] = {

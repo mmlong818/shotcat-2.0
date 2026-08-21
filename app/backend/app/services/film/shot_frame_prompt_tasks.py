@@ -26,6 +26,7 @@ from app.models.studio import (
     Shot,
     ShotCharacterLink,
     ShotDetail,
+    ShotFrameImage,
 )
 from app.services.llm.runtime import build_default_text_llm_sync
 from app.services.common import entity_not_found, invalid_choice
@@ -1182,6 +1183,23 @@ async def run_shot_frame_prompt_task(
                 shot_detail.last_frame_prompt = result.prompt
             else:
                 shot_detail.key_frame_prompt = result.prompt
+
+            shot_detail.version += 1
+            shot_detail.prompt_version += 1
+            shot = await session.get(Shot, shot_id)
+            if shot is not None:
+                shot.version += 1
+                shot.is_stale = False
+                shot.stale_reason = ""
+            frame_type_value = {"first": "first", "last": "last", "key": "key"}[frame_type]
+            existing_frame = (await session.execute(
+                select(ShotFrameImage).where(
+                    ShotFrameImage.shot_detail_id == shot_id,
+                    ShotFrameImage.frame_type == frame_type_value,
+                )
+            )).scalars().first()
+            if existing_frame is not None and existing_frame.file_id:
+                existing_frame.is_stale = True
 
             result_payload = result.model_dump()
             result_payload["debug_context"] = dict(input_dict)

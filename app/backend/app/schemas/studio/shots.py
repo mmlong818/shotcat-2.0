@@ -31,6 +31,10 @@ class ShotBase(BaseModel):
     status: ShotStatus = Field(ShotStatus.pending, description="镜头状态")
     skip_extraction: bool = Field(False, description="是否明确跳过信息提取")
     script_excerpt: str = Field("", description="剧本摘录")
+    version: int = Field(1, ge=1, description="镜头记录版本")
+    source_chapter_version: int = Field(1, ge=1, description="拆镜头时使用的剧本版本")
+    is_stale: bool = Field(False, description="是否因上游变更而待重做")
+    stale_reason: str = Field("", description="待重做原因")
     generated_video_file_id: str | None = Field(
         None,
         description="已生成视频关联的文件 ID（files.id，type=video）",
@@ -153,6 +157,13 @@ class ShotDetailBase(BaseModel):
         "",
         description="镜头分镜关键帧提示词",
     )
+    version: int = Field(1, ge=1, description="镜头设计版本")
+    prompt_version: int = Field(1, ge=1, description="画面提示词版本")
+    narrative_function: str = Field("", description="镜头叙事目的")
+    continuity_from_previous: str = Field("", description="与前镜连续性")
+    transition_from_previous: str = Field("", description="与前镜转场关系")
+    sound_effects: str = Field("", description="镜头声音设计")
+    reference_relations: str = Field("", description="资产引用关系")
 
 
 class ShotDetailCreate(ShotDetailBase):
@@ -177,6 +188,11 @@ class ShotDetailUpdate(BaseModel):
     first_frame_prompt: str | None = None
     last_frame_prompt: str | None = None
     key_frame_prompt: str | None = None
+    narrative_function: str | None = None
+    continuity_from_previous: str | None = None
+    transition_from_previous: str | None = None
+    sound_effects: str | None = None
+    reference_relations: str | None = None
 
 
 class ShotDetailRead(ShotDetailBase):
@@ -270,6 +286,10 @@ class ShotFrameImageBase(BaseModel):
     width: int | None = Field(None, description="宽(px)")
     height: int | None = Field(None, description="高(px)")
     format: str = Field("png", description="格式")
+    shot_version: int = Field(1, ge=1, description="生成时使用的镜头版本")
+    prompt_version: int = Field(1, ge=1, description="生成时使用的提示词版本")
+    asset_versions: dict[str, object] = Field(default_factory=dict, description="生成时使用的资产版本")
+    is_stale: bool = Field(False, description="是否因上游变化而失效")
 
 
 class ShotFrameImageCreate(BaseModel):
@@ -279,6 +299,10 @@ class ShotFrameImageCreate(BaseModel):
     width: int | None = None
     height: int | None = None
     format: str = "png"
+    shot_version: int = 1
+    prompt_version: int = 1
+    asset_versions: dict[str, object] = Field(default_factory=dict)
+    is_stale: bool = False
 
 
 class ShotFrameImageUpdate(BaseModel):

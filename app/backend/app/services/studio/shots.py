@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.utils import apply_keyword_filter, apply_order, paginate
@@ -15,6 +15,7 @@ from app.models.studio import (
     ShotDialogueCandidateStatus,
     ShotExtractedCandidate,
     ShotExtractedDialogueCandidate,
+    ShotFrameImage,
 )
 from app.schemas.common import ApiResponse, PaginatedData, paginated_response
 from app.schemas.studio.shots import ShotCreate, ShotExtractionSummaryRead, ShotRead, ShotUpdate
@@ -128,6 +129,10 @@ def _build_shot_read(
         status=shot.status,
         skip_extraction=bool(shot.skip_extraction),
         script_excerpt=shot.script_excerpt or "",
+        version=shot.version,
+        source_chapter_version=shot.source_chapter_version,
+        is_stale=shot.is_stale,
+        stale_reason=shot.stale_reason or "",
         generated_video_file_id=shot.generated_video_file_id,
         last_extracted_at=shot.last_extracted_at,
         extraction=ShotExtractionSummaryRead(
@@ -237,6 +242,15 @@ async def update(
             status_code=400,
         )
     patch_model(obj, update_data)
+    if update_data:
+        obj.version += 1
+        obj.is_stale = False
+        obj.stale_reason = ""
+        await db.execute(
+            sql_update(ShotFrameImage)
+            .where(ShotFrameImage.shot_detail_id == shot_id, ShotFrameImage.file_id.is_not(None))
+            .values(is_stale=True)
+        )
     return await flush_and_refresh(db, obj)
 
 

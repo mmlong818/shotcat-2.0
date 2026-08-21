@@ -52,6 +52,7 @@ class ChapterBase(BaseModel):
     title: str = Field(..., description="章节标题")
     summary: str = Field("", description="章节摘要")
     raw_text: str = Field("", description="章节原文")
+    version: int = Field(1, ge=1, description="剧本内容版本")
     condensed_text: str = Field("", description="精简原文")
     storyboard_count: int = Field(0, description="分镜数量")
     status: ChapterStatus = Field(ChapterStatus.draft, description="章节状态")

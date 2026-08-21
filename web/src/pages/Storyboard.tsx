@@ -42,7 +42,7 @@ export default function Storyboard({ project }: { project: Project | null }) {
   const [sel, setSel] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [pipe, setPipe] = useState('') // shot-breakdown 进行中
-  const [pendingRepair, setPendingRepair] = useState<{ jobId: string; issues: string[]; error: string } | null>(null)
+  const [pendingRepair, setPendingRepair] = useState<{ jobId: string; issues: string[]; error: string; revisionId?: string } | null>(null)
   const pipelineActive = usePipelineJobActive(project?.id, 'shot-breakdown')
   const [err, setErr] = useState('')
   const navigate = useNavigate()
@@ -107,7 +107,7 @@ export default function Storyboard({ project }: { project: Project | null }) {
         }
         if (state.status !== 'awaiting_confirmation') return
         await loadAll()
-        setPendingRepair({ jobId, issues: state.issues || [], error: state.error || '' })
+        setPendingRepair({ jobId, issues: state.issues || [], error: state.error || '', revisionId: state.revision_id })
         return
       }
     } catch (e: any) {
@@ -155,11 +155,15 @@ export default function Storyboard({ project }: { project: Project | null }) {
   async function aiBreakdown() {
     if (!project || pipe || pipelineActive) return
     const existingShotCount = Object.values(shotsByCh).reduce((count, items) => count + items.length, 0)
-    if (existingShotCount > 0 && !confirmOverwrite({
-      step: 'AI 重新拆镜头',
-      replaces: [`现有 ${existingShotCount} 个镜头及手动修改`, '这些镜头对应的提示词和已生成画面'],
-      consequence: '旧镜头会被删除并按当前剧本重新建立，此操作无法撤销。',
-    })) return
+    if (existingShotCount > 0) {
+      const impact = await api.workflowImpact(project.id, 'storyboard').catch(() => null)
+      const affectedFrames = impact?.items.find((item) => item.step === 'frames')?.affected_count || 0
+      if (!confirmOverwrite({
+        step: 'AI 重新拆镜头',
+        replaces: [`现有 ${existingShotCount} 个镜头及手动修改`, `${affectedFrames} 张已生成画面会标记为待重做`],
+        consequence: '系统会先保存当前分镜版本，再按当前剧本重建；旧版可从项目版本记录中取回。',
+      })) return
+    }
     const jobId = await api.runPipeline('shot-breakdown', project.id).catch((e: any) => {
       alert(e?.message || '拆镜头失败')
       return ''
@@ -210,7 +214,7 @@ export default function Storyboard({ project }: { project: Project | null }) {
         <div className="repair-panel" role="status">
           <div className="repair-panel-copy">
             <strong>导演校验发现 {pendingRepair.issues.length || '若干'} 个关键问题</strong>
-            <span>完整分镜草稿已保存。继续后只修正对应镜头，切换页面不会停止任务。</span>
+            <span>完整分镜草稿已保存{pendingRepair.revisionId ? `（版本 ${pendingRepair.revisionId.slice(-8)}）` : ''}。继续后只修正对应镜头，切换页面不会停止任务。</span>
             {(pendingRepair.issues.length > 0 || pendingRepair.error) && (
               <ul>{(pendingRepair.issues.length ? pendingRepair.issues : [pendingRepair.error]).slice(0, 6).map((issue) => <li key={issue}>{issue}</li>)}</ul>
             )}
@@ -283,13 +287,13 @@ export default function Storyboard({ project }: { project: Project | null }) {
                     }
                     return (
                       <div
-                        className={'sb-row' + (editing ? ' sel' : '')}
+                        className={'sb-row' + (editing ? ' sel' : '') + (s.is_stale ? ' stale' : '')}
                         key={s.id}
                         onClick={() => setSel(s.id)}
                         onDoubleClick={() => navigate(`/frames?shot=${s.id}`)}
                         title={editing ? undefined : '单击编辑 · 双击进画面工作台'}
                       >
-                        <div className="c-no">{String(s.index).padStart(2, '0')}{ready && <div className="okdot" title="画面就绪">✓</div>}</div>
+                        <div className="c-no">{String(s.index).padStart(2, '0')}{ready && !s.is_stale && <div className="okdot" title="画面就绪">✓</div>}{s.is_stale && <div className="stale-dot" title={s.stale_reason || '上游内容已变化'}>!</div>}</div>
                         {editing ? (
                           <div className="c-cam" onClick={(e) => e.stopPropagation()}>
                             <select className="cam-sel" value={s.camera_shot || 'MS'}

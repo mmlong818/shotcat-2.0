@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import select, update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.utils import apply_order, paginate
-from app.models.studio import Scene, Shot, ShotDetail
+from app.models.studio import Scene, Shot, ShotDetail, ShotFrameImage
 from app.schemas.common import ApiResponse, PaginatedData, paginated_response
 from app.schemas.studio.shots import ShotDetailCreate, ShotDetailRead, ShotDetailUpdate
 from app.services.common import (
@@ -95,7 +95,21 @@ async def update(
             detail=entity_not_found("Scene"),
             status_code=400,
         )
+    if update_data:
+        obj.version += 1
+        if {"first_frame_prompt", "last_frame_prompt", "key_frame_prompt"} & update_data.keys():
+            obj.prompt_version += 1
     patch_model(obj, update_data)
+    shot = await db.get(Shot, shot_id)
+    if shot is not None and update_data:
+        shot.version += 1
+        shot.is_stale = False
+        shot.stale_reason = ""
+        await db.execute(
+            sql_update(ShotFrameImage)
+            .where(ShotFrameImage.shot_detail_id == shot_id, ShotFrameImage.file_id.is_not(None))
+            .values(is_stale=True)
+        )
     obj = await flush_and_refresh(db, obj)
     if "scene_id" in update_data and old_scene_id and old_scene_id != obj.scene_id:
         await mark_pending_by_linked_entity(

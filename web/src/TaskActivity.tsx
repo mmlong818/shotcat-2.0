@@ -6,6 +6,7 @@ import {
   forgetPipelineJob,
   PIPELINE_JOB_EVENT,
   readPipelineJobs,
+  rememberPipelineJob,
   type AssetImageBatchStatus,
   type PipelineJobRecord,
   type PipelineJobStatus,
@@ -185,7 +186,17 @@ export default function TaskActivity() {
       if (refreshing) return
       refreshing = true
       try {
-        const jobs = readPipelineJobs()
+        const discovered = await api.pipelineJobs().catch(() => null)
+        const jobsById = new Map(readPipelineJobs().map((job) => [job.jobId, job]))
+        for (const job of discovered || []) {
+          if (!job.job_id || !job.pid || !job.step) continue
+          if (job.status === 'done' || job.status === 'error' || job.status === 'cancelled') continue
+          const record = { jobId: job.job_id, projectId: job.pid, step: job.step, createdAt: job.created_at || Date.now() }
+          const isNew = !jobsById.has(record.jobId)
+          jobsById.set(record.jobId, record)
+          if (isNew) rememberPipelineJob(record)
+        }
+        const jobs = [...jobsById.values()]
         const batchRegistrations = readBatchRegistrations()
         const [nextTasks, nextPipeline, nextBatches] = await Promise.all([
           api.activeTasks().catch(() => null),

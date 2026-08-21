@@ -19,6 +19,7 @@ from app.schemas.studio.project_brain import (
 )
 from app.services.common import entity_not_found, flush_and_refresh, get_or_404, patch_model
 from app.services.project_brain_tasks import create_project_brain_extraction_task
+from app.services.studio.workflow import capture_revision
 from app.tasks.execute_task import enqueue_task_execution
 
 router = APIRouter()
@@ -121,6 +122,13 @@ async def create_project_brain_entry(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ProjectBrainEntryRead]:
     await get_or_404(db, Project, project_id, detail=entity_not_found("Project"))
+    if body.status == ProjectBrainStatus.confirmed and isinstance(db, AsyncSession):
+        await capture_revision(
+            db,
+            project_id=project_id,
+            source_step="brain",
+            reason="新增已确认项目规则前自动保存",
+        )
     entry = ProjectBrainEntry(
         id=f"brain_{uuid4().hex}",
         project_id=project_id,
@@ -147,6 +155,22 @@ async def update_project_brain_entry(
             detail=f"项目大脑条目已更新，请刷新后重试（当前版本 {entry.version}）",
         )
     changes = body.model_dump(exclude_unset=True, exclude={"expected_version"})
+    changes_confirmed_rules = (
+        entry.status == ProjectBrainStatus.confirmed
+        or changes.get("status") == ProjectBrainStatus.confirmed
+    )
+    if (
+        isinstance(db, AsyncSession)
+        and changes_confirmed_rules
+        and changes
+        and any(getattr(entry, key) != value for key, value in changes.items())
+    ):
+        await capture_revision(
+            db,
+            project_id=project_id,
+            source_step="brain",
+            reason="修改项目大脑前自动保存",
+        )
     patch_model(entry, changes)
     entry.version += 1
     await flush_and_refresh(db, entry)
@@ -162,6 +186,13 @@ async def delete_project_brain_entry(
     entry = await _get_entry(db, project_id=project_id, entry_id=entry_id)
     if entry.locked:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="已锁定条目不能删除，请先解除锁定")
+    if entry.status == ProjectBrainStatus.confirmed and isinstance(db, AsyncSession):
+        await capture_revision(
+            db,
+            project_id=project_id,
+            source_step="brain",
+            reason="删除已确认项目规则前自动保存",
+        )
     await db.delete(entry)
     await db.flush()
     return empty_response()

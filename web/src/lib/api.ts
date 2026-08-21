@@ -65,11 +65,12 @@ export interface ProjectBrainSummary {
   by_category: Partial<Record<ProjectBrainCategory, number>>
 }
 export interface ProjectBrainExtractionTaskCreated { task_id: string; status: string; reused: boolean }
-export interface Chapter { id: string; index: number; title: string; project_id: string; raw_text?: string }
+export interface Chapter { id: string; index: number; title: string; project_id: string; raw_text?: string; version?: number }
 export interface Shot {
   id: string; index: number; chapter_id?: string; title?: string; status?: string; script_excerpt?: string
   camera_shot?: string; duration?: number; angle?: string; movement?: string; action_beats?: string[]; description?: string
   scene_id?: string | null; mood_tags?: string[]
+  version?: number; source_chapter_version?: number; is_stale?: boolean; stale_reason?: string
 }
 
 // 镜头语言代码 → 中文（与后端 code、bridge/shot_breakdown 词表一致）
@@ -136,6 +137,25 @@ export interface PipelineJobStatus {
   cancel_requested?: boolean
   issues?: string[]
   repair_round?: number
+  job_id?: string
+  pid?: string
+  step?: PipelineStep
+  revision_id?: string
+  created_at?: number
+}
+
+export interface WorkflowImpactItem { step: string; label: string; affected_count: number }
+export interface WorkflowImpact { project_id: string; source_step: string; total_affected: number; items: WorkflowImpactItem[] }
+export interface WorkflowInvalidation {
+  id: number; project_id: string; revision_id: string; downstream_step: string
+  affected_count: number; reason: string; status: string; created_at: string
+}
+export interface WorkflowRevision {
+  id: string; project_id: string; source_step: string; revision: number
+  reason: string; source_task_id?: string | null; restored: boolean; created_at: string
+}
+export interface WorkflowRevisionSnapshot {
+  id: string; project_id: string; source_step: string; revision: number; snapshot: Record<string, unknown>
 }
 
 export const PIPELINE_JOB_EVENT = 'shotcat:pipeline-jobs-changed'
@@ -235,6 +255,22 @@ export const api = {
     get<ProjectBrainEntry[]>(`/studio/projects/${encodeURIComponent(projectId)}/brain`),
   projectBrainSummary: (projectId: string) =>
     get<ProjectBrainSummary>(`/studio/projects/${encodeURIComponent(projectId)}/brain/summary`),
+  workflowImpact: (projectId: string, sourceStep: string) =>
+    get<WorkflowImpact>(`/studio/projects/${encodeURIComponent(projectId)}/workflow/impact?source_step=${encodeURIComponent(sourceStep)}`),
+  workflowInvalidations: (projectId: string) =>
+    get<WorkflowInvalidation[]>(`/studio/projects/${encodeURIComponent(projectId)}/workflow/invalidations`),
+  workflowRevisions: (projectId: string) =>
+    get<WorkflowRevision[]>(`/studio/projects/${encodeURIComponent(projectId)}/workflow/revisions`),
+  workflowRevisionSnapshot: (projectId: string, revisionId: string) =>
+    get<WorkflowRevisionSnapshot>(`/studio/projects/${encodeURIComponent(projectId)}/workflow/revisions/${encodeURIComponent(revisionId)}/snapshot`),
+  resolveWorkflowInvalidation: (projectId: string, invalidationId: number) =>
+    fetch(`${BASE}/studio/projects/${encodeURIComponent(projectId)}/workflow/invalidations/${invalidationId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'resolved' }),
+    }).then(async (r) => {
+      const j = await r.json().catch(() => null)
+      if (!r.ok) throw new Error(j?.message || `更新失败 ${r.status}`)
+      return (j?.data ?? j) as WorkflowInvalidation
+    }),
   createProjectBrainExtraction: (projectId: string) =>
     post<ProjectBrainExtractionTaskCreated>(`/studio/projects/${encodeURIComponent(projectId)}/brain/extractions`, {}),
   projectBrainExtractionTasks: (projectId: string) =>
@@ -579,6 +615,7 @@ export const api = {
     return payload
   },
   pipelineJobStatus: (jobId: string) => api._pipelineJson(`/pipeline/jobs/${jobId}`) as Promise<PipelineJobStatus>,
+  pipelineJobs: () => api._pipelineJson('/pipeline/jobs').then((value: any) => (value?.items || []) as PipelineJobStatus[]),
   cancelPipelineJob: (jobId: string) => api._pipelineJson(`/pipeline/jobs/${jobId}/cancel`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
   }) as Promise<PipelineJobStatus>,

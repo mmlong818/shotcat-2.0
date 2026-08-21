@@ -29,6 +29,7 @@ from app.models.studio import (
     CostumeImage,
     PropImage,
     SceneImage,
+    Shot,
     ShotDetail,
     ShotFrameType,
     ShotFrameImage,
@@ -343,6 +344,7 @@ async def _create_shot_frame_image_task_internal(
     shot_detail = await db.get(ShotDetail, shot_id)
     if shot_detail is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ShotDetail not found")
+    shot = await db.get(Shot, shot_id)
     render_guidance = await _load_frame_render_guidance(
         db=db,
         shot_id=shot_id,
@@ -383,12 +385,23 @@ async def _create_shot_frame_image_task_internal(
             width=None,
             height=None,
             format="png",
+            shot_version=shot.version if shot is not None else 1,
+            prompt_version=getattr(shot_detail, "prompt_version", 1),
+            asset_versions={f"{item.type}:{item.id}": item.file_id or "" for item in images},
+            is_stale=False,
         )
         db.add(shot_frame_image)
         await db.flush()
         await db.refresh(shot_frame_image)
     elif not shot_frame_image.format:
         shot_frame_image.format = "png"
+
+    shot_frame_image.shot_version = shot.version if shot is not None else 1
+    shot_frame_image.prompt_version = getattr(shot_detail, "prompt_version", 1)
+    shot_frame_image.asset_versions = {
+        f"{item.type}:{item.id}": item.file_id or "" for item in images
+    }
+    shot_frame_image.is_stale = False
 
     submission_extra = dict(submission.extra or {})
     return await _create_image_task_and_link_service(

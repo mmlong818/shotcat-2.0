@@ -691,7 +691,7 @@ export default function Frames({ project }: { project: Project | null }) {
                     const task = frameTasks[s.id]?.key
                     const statusText = frameStatusLabel(batchItemStatuses[s.id] || task?.status, task?.progress, !!tf)
                     return (
-                      <div key={s.id} className={'fshot' + (sel?.id === s.id ? ' sel' : '')} onClick={() => setSel(s)}>
+                      <div key={s.id} className={'fshot' + (sel?.id === s.id ? ' sel' : '') + (s.is_stale ? ' stale' : '')} onClick={() => setSel(s)}>
                         {tf ? (
                           <img className="th" src={fileUrl(tf)} alt="" loading="lazy" />
                         ) : (
@@ -700,7 +700,7 @@ export default function Frames({ project }: { project: Project | null }) {
                         <div className="m">
                           <div className="t">{s.title || `镜头 ${s.index}`}</div>
                           <div className="s">
-                            {String(s.index).padStart(2, '0')}{s.camera_shot ? ` · ${s.camera_shot}` : ''}{statusText ? ` · ${statusText}` : ''}
+                            {String(s.index).padStart(2, '0')}{s.camera_shot ? ` · ${s.camera_shot}` : ''}{s.is_stale ? ' · 待重做' : statusText ? ` · ${statusText}` : ''}
                           </div>
                         </div>
                       </div>
@@ -718,6 +718,13 @@ export default function Frames({ project }: { project: Project | null }) {
                 <span>{(sel?.script_excerpt || '').slice(0, 30)}</span>
               </div>
             </div>
+
+            {sel?.is_stale && (
+              <div className="stale-notice" role="status">
+                <strong>这个镜头使用了旧版上游内容</strong>
+                <span>{sel.stale_reason || '剧本、项目规则或造型已变化，请重新确认镜头并生成画面。'}</span>
+              </div>
+            )}
 
             {/* 镜头属性 + 就绪度：并入中间的紧凑信息条 */}
             <div className="meta-bar">

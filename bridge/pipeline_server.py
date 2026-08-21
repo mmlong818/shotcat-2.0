@@ -9,7 +9,7 @@ step ∈ visual-dict | shot-breakdown | unit-gen
 启动：python pipeline_server.py  (默认 5280)
 """
 from __future__ import annotations
-import json, os, subprocess, sys, threading, uuid
+import json, os, subprocess, sys, threading, time, urllib.error, urllib.request, uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -25,6 +25,76 @@ PROCESSES: dict[str, subprocess.Popen[str]] = {}
 RUN_LOCK = threading.Lock()  # 保持原有串行语义，避免多项 pipeline 同时改写项目数据。
 JOBS_LOCK = threading.Lock()
 REPAIR_MARKER = "SHOTCAT_REPAIR_REQUIRED:"
+JOBS_FILE = BRIDGE_DIR / "pipeline-jobs.json"
+BACKEND = os.getenv("SHOTCAT_BACKEND_URL", "http://127.0.0.1:8000/api/v1").rstrip("/")
+PIPELINE_HOST = os.getenv("SHOTCAT_PIPELINE_HOST", "127.0.0.1")
+PIPELINE_PORT = int(os.getenv("SHOTCAT_PIPELINE_PORT", "5280"))
+REVISION_STEP = {
+    "extract-setup": "brain",
+    "visual-dict": "cast",
+    "shot-breakdown": "storyboard",
+    "unit-gen": "frames",
+}
+COMPLETED_STEP = {
+    "extract-setup": "cast", "visual-dict": "cast",
+    "shot-breakdown": "storyboard", "unit-gen": "frames",
+}
+
+
+def _load_jobs() -> dict[str, dict]:
+    try:
+        value = json.loads(JOBS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {}
+    if not isinstance(value, dict):
+        return {}
+    for job in value.values():
+        if isinstance(job, dict) and job.get("status") in {"queued", "running", "cancelling"}:
+            job["status"] = "error"
+            job["error"] = "Pipeline 服务曾中断；原任务未继续执行，可重新发起。"
+    return {str(key): item for key, item in value.items() if isinstance(item, dict)}
+
+
+def _persist_jobs_locked() -> None:
+    temp = JOBS_FILE.with_suffix(".tmp")
+    temp.write_text(json.dumps(JOBS, ensure_ascii=False, indent=2), encoding="utf-8")
+    temp.replace(JOBS_FILE)
+
+
+def _capture_revision(pid: str, step: str, job_id: str, repair: bool = False) -> str:
+    payload = json.dumps({
+        "source_step": REVISION_STEP[step],
+        "reason": f"{'导演定向修正' if repair else '执行 Pipeline 步骤'}：{step}",
+        "source_task_id": job_id,
+    }, ensure_ascii=False).encode("utf-8")
+    request = urllib.request.Request(
+        f"{BACKEND}/studio/projects/{pid}/workflow/revisions",
+        data=payload,
+        method="POST",
+        headers={"Content-Type": "application/json; charset=utf-8"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"无法保存重做前快照，已停止执行：{exc}") from exc
+    revision_id = str((body.get("data") or {}).get("id") or "")
+    if not revision_id:
+        raise RuntimeError("无法保存重做前快照，后端未返回版本编号")
+    return revision_id
+
+
+def _complete_step(pid: str, step: str) -> None:
+    payload = json.dumps({"step": COMPLETED_STEP[step]}).encode("utf-8")
+    request = urllib.request.Request(
+        f"{BACKEND}/studio/projects/{pid}/workflow/complete",
+        data=payload, method="POST", headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=15):
+        return None
+
+
+JOBS.update(_load_jobs())
 
 
 def _job_snapshot(job_id: str) -> dict | None:
@@ -54,10 +124,17 @@ def _run(job_id: str, step: str, pid: str, model: str, repair: bool = False):
             job = JOBS[job_id]
             if job.get("cancel_requested"):
                 job["status"] = "cancelled"
+                _persist_jobs_locked()
                 return
             job["status"] = "running"
+            _persist_jobs_locked()
         creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
+            revision_id = _capture_revision(pid, step, job_id, repair)
+            with JOBS_LOCK:
+                JOBS[job_id]["revision_id"] = revision_id
+                JOBS[job_id].setdefault("revision_ids", []).append(revision_id)
+                _persist_jobs_locked()
             command = [*STEPS[step], pid, "--model", model]
             if repair and step == "shot-breakdown":
                 command.append("--repair")
@@ -81,6 +158,7 @@ def _run(job_id: str, step: str, pid: str, model: str, repair: bool = False):
                 for line in process.stdout:
                     with JOBS_LOCK:
                         JOBS[job_id]["log"] += line
+                        _persist_jobs_locked()
             return_code = process.wait()
             with JOBS_LOCK:
                 job = JOBS[job_id]
@@ -94,9 +172,14 @@ def _run(job_id: str, step: str, pid: str, model: str, repair: bool = False):
                     job["error"] = f"导演校验发现 {payload.get('count') or len(job['issues'])} 个关键问题"
                 elif return_code == 0:
                     job["status"] = "done"
+                    try:
+                        _complete_step(pid, step)
+                    except (OSError, urllib.error.URLError):
+                        job["log"] += "\n警告：任务已完成，但工作流完成状态回写失败。\n"
                 else:
                     job["status"] = "error"
                     job["error"] = job["log"].strip().splitlines()[-1] if job["log"].strip() else f"子进程退出码 {return_code}"
+                _persist_jobs_locked()
         except Exception as e:  # noqa: BLE001
             with JOBS_LOCK:
                 job = JOBS[job_id]
@@ -106,6 +189,7 @@ def _run(job_id: str, step: str, pid: str, model: str, repair: bool = False):
                 else:
                     job["status"] = "error"
                     job["error"] = f"{type(e).__name__}: {e}"
+                _persist_jobs_locked()
         finally:
             with JOBS_LOCK:
                 PROCESSES.pop(job_id, None)
@@ -127,6 +211,7 @@ def _cancel_job(job_id: str) -> dict | None:
         elif process is not None:
             job["status"] = "cancelling"
         snapshot = dict(job)
+        _persist_jobs_locked()
     if process is not None and process.poll() is None:
         process.terminate()
     return snapshot
@@ -148,6 +233,7 @@ def _confirm_repair(job_id: str) -> dict | None:
         pid = str(job["pid"])
         model = str(job["model"])
         snapshot = dict(job)
+        _persist_jobs_locked()
     threading.Thread(target=_run, args=(job_id, step, pid, model, True), daemon=True).start()
     return snapshot
 
@@ -167,6 +253,13 @@ class H(BaseHTTPRequestHandler):
         self._send(204, {})
 
     def do_GET(self):
+        if self.path == "/pipeline/jobs" or self.path.startswith("/pipeline/jobs?"):
+            query = self.path.split("?", 1)[1] if "?" in self.path else ""
+            params = dict(item.split("=", 1) for item in query.split("&") if "=" in item)
+            pid = params.get("pid", "")
+            with JOBS_LOCK:
+                jobs = [dict({"job_id": job_id}, **job) for job_id, job in JOBS.items() if not pid or job.get("pid") == pid]
+            return self._send(200, {"items": jobs})
         if self.path.startswith("/pipeline/jobs/"):
             jid = self.path.rsplit("/", 1)[-1]
             job = _job_snapshot(jid)
@@ -201,7 +294,9 @@ class H(BaseHTTPRequestHandler):
             JOBS[jid] = {
                 "status": "queued", "log": "", "error": "", "step": step, "pid": pid,
                 "model": model, "cancel_requested": False, "issues": [], "repair_round": 0,
+                "created_at": int(time.time() * 1000),
             }
+            _persist_jobs_locked()
         threading.Thread(target=_run, args=(jid, step, pid, model), daemon=True).start()
         self._send(200, {"job_id": jid})
 
@@ -210,5 +305,5 @@ class H(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print("pipeline server on http://127.0.0.1:5280  (steps: %s)" % ", ".join(STEPS))
-    ThreadingHTTPServer(("127.0.0.1", 5280), H).serve_forever()
+    print(f"pipeline server on http://{PIPELINE_HOST}:{PIPELINE_PORT}  (steps: {', '.join(STEPS)})")
+    ThreadingHTTPServer((PIPELINE_HOST, PIPELINE_PORT), H).serve_forever()

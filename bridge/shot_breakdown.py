@@ -797,6 +797,7 @@ def run(pid: str, model: str, *, repair: bool = False):
         c1, _ = _req("POST", "/studio/shots", {
             "id": sid, "chapter_id": ch["id"], "index": i,
             "title": s.get("title", f"镜头{i}"), "script_excerpt": s.get("script_content", ""), "status": "pending",
+            "source_chapter_version": int(ch.get("version") or 1), "is_stale": False, "stale_reason": "",
         })
         if c1 >= 400:
             raise SystemExit(f"镜{i} 落库失败(HTTP {c1})")
@@ -813,6 +814,11 @@ def run(pid: str, model: str, *, repair: bool = False):
             "action_beats": [*s.get("action_beats", []), *dialogue_beats],
             "description": _build_shot_description(s),
             "atmosphere": s.get("atmosphere", ""),
+            "narrative_function": s.get("narrative_function", ""),
+            "continuity_from_previous": s.get("continuity_from_previous", ""),
+            "transition_from_previous": s.get("transition_from_previous", ""),
+            "sound_effects": s.get("sfx", ""),
+            "reference_relations": s.get("reference_relations", ""),
             # 场次时间/内外景：ShotDetail 无专用字段，按 "时:X"/"景:X" 约定存 mood_tags
             # （mood_tags 会进帧提示词链，时间与内外景本身也是画面生成的关键信息）
             "mood_tags": [t for t in [

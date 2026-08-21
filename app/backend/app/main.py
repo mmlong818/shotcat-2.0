@@ -61,6 +61,10 @@ async def lifespan(app: FastAPI):
     """应用生命周期：启动时初始化，关闭时清理。"""
     # 启动时：供应商注册 + 任务执行器注册（幂等）
     bootstrap_all_registries()
+    # 2.0 可在全新目录首次启动；先创建数据库结构，再执行任务和数据修复。
+    from app.core.db import init_db
+
+    await init_db()
     # 本机线程随服务进程退出；启动时终结其遗留记录，避免页面永久显示“执行中”。
     from app.services.worker.task_recovery import reconcile_orphaned_local_tasks
 

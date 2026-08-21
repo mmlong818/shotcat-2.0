@@ -115,6 +115,7 @@ class Chapter(Base, TimestampMixin):
     title: Mapped[str] = mapped_column(String(255), nullable=False, comment="章节标题")
     summary: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="章节摘要")
     raw_text: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="章节原文（未清洗/可较长）")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, comment="剧本内容版本")
     condensed_text: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="由模型精简后的原文（用于抽取/提示词）")
     storyboard_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="分镜数量")
     status: Mapped[ChapterStatus] = mapped_column(

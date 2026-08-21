@@ -10,6 +10,7 @@ generated-story-bible.json
 # Python
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # 依赖/构建
 node_modules/
@@ -59,5 +60,8 @@ app/backend/jellyfish.db*
 app/backend/local-storage/
 jellyfish.db*
 bridge/*.log
+bridge/pipeline-jobs.json
+bridge/pipeline-jobs.tmp
 web/*.log
 .tmp-openapi.json
+.test-*/
