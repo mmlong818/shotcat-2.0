@@ -7,15 +7,17 @@ from enum import Enum
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.studio import (
-    ActorImage, Chapter, Character, CharacterImage, Costume, CostumeImage,
+    Actor, ActorImage, Chapter, Character, CharacterImage, CharacterPropLink,
+    Costume, CostumeImage,
     Project, ProjectActorLink, ProjectBrainEntry, ProjectCostumeLink,
     ProjectPropLink, ProjectSceneLink, ProjectWorkflowInvalidation,
     ProjectWorkflowRevision, Prop, PropImage, Scene, SceneImage, Shot,
-    ShotCharacterLink, ShotDetail, ShotDialogLine, ShotFrameImage,
+    ShotCharacterLink, ShotDetail, ShotDialogLine, ShotExtractedCandidate,
+    ShotExtractedDialogueCandidate, ShotFrameImage,
 )
 from app.schemas.studio.workflow import WorkflowImpactItem, WorkflowImpactRead
 
@@ -82,10 +84,12 @@ async def _snapshot(db: AsyncSession, *, project_id: str) -> dict[str, Any]:
     scenes = await _rows(db, Scene, Scene.project_id == project_id)
     props = await _rows(db, Prop, Prop.project_id == project_id)
     costumes = await _rows(db, Costume, Costume.project_id == project_id)
+    actors = await _rows(db, Actor, Actor.project_id == project_id)
     character_ids = [row.id for row in characters]
     scene_ids = [row.id for row in scenes]
     prop_ids = [row.id for row in props]
     costume_ids = [row.id for row in costumes]
+    actor_ids = [row.id for row in actors]
     return {
         "project": _row_payload(project) if project is not None else None,
         "chapters": [_row_payload(row) for row in chapters],
@@ -94,11 +98,15 @@ async def _snapshot(db: AsyncSession, *, project_id: str) -> dict[str, Any]:
         "scenes": [_row_payload(row) for row in scenes],
         "props": [_row_payload(row) for row in props],
         "costumes": [_row_payload(row) for row in costumes],
+        "actors": [_row_payload(row) for row in actors],
+        "character_prop_links": [_row_payload(row) for row in await _rows(db, CharacterPropLink, CharacterPropLink.character_id.in_(character_ids))] if character_ids else [],
         "shots": [_row_payload(row) for row in shots],
         "shot_details": [_row_payload(row) for row in details],
         "frame_images": [_row_payload(row) for row in frames],
         "dialog_lines": [_row_payload(row) for row in await _rows(db, ShotDialogLine, ShotDialogLine.shot_detail_id.in_(shot_ids))] if shot_ids else [],
         "shot_character_links": [_row_payload(row) for row in await _rows(db, ShotCharacterLink, ShotCharacterLink.shot_id.in_(shot_ids))] if shot_ids else [],
+        "shot_extracted_candidates": [_row_payload(row) for row in await _rows(db, ShotExtractedCandidate, ShotExtractedCandidate.shot_id.in_(shot_ids))] if shot_ids else [],
+        "shot_extracted_dialogue_candidates": [_row_payload(row) for row in await _rows(db, ShotExtractedDialogueCandidate, ShotExtractedDialogueCandidate.shot_id.in_(shot_ids))] if shot_ids else [],
         "project_actor_links": [_row_payload(row) for row in await _rows(db, ProjectActorLink, ProjectActorLink.project_id == project_id)],
         "project_scene_links": [_row_payload(row) for row in await _rows(db, ProjectSceneLink, ProjectSceneLink.project_id == project_id)],
         "project_prop_links": [_row_payload(row) for row in await _rows(db, ProjectPropLink, ProjectPropLink.project_id == project_id)],
@@ -107,8 +115,119 @@ async def _snapshot(db: AsyncSession, *, project_id: str) -> dict[str, Any]:
         "scene_images": [_row_payload(row) for row in await _rows(db, SceneImage, SceneImage.scene_id.in_(scene_ids))] if scene_ids else [],
         "prop_images": [_row_payload(row) for row in await _rows(db, PropImage, PropImage.prop_id.in_(prop_ids))] if prop_ids else [],
         "costume_images": [_row_payload(row) for row in await _rows(db, CostumeImage, CostumeImage.costume_id.in_(costume_ids))] if costume_ids else [],
-        "actor_images": [_row_payload(row) for row in await _rows(db, ActorImage, ActorImage.actor_id.in_(select(ProjectActorLink.actor_id).where(ProjectActorLink.project_id == project_id)))],
+        "actor_images": [_row_payload(row) for row in await _rows(db, ActorImage, ActorImage.actor_id.in_(actor_ids))] if actor_ids else [],
     }
+
+
+def _restore_payload(model: Any, payload: dict[str, Any]) -> dict[str, Any]:
+    values: dict[str, Any] = {}
+    for column in model.__table__.columns:
+        if column.name not in payload:
+            continue
+        value = payload[column.name]
+        if isinstance(value, str):
+            try:
+                python_type = column.type.python_type
+            except (AttributeError, NotImplementedError):
+                python_type = None
+            if python_type is datetime:
+                value = datetime.fromisoformat(value)
+            elif python_type is date:
+                value = date.fromisoformat(value)
+        values[column.name] = value
+    return values
+
+
+async def _insert_snapshot_rows(db: AsyncSession, snapshot: dict[str, Any], key: str, model: Any) -> None:
+    rows = snapshot.get(key) or []
+    if rows:
+        await db.execute(model.__table__.insert(), [_restore_payload(model, row) for row in rows])
+        await db.flush()
+
+
+async def restore_revision(
+    db: AsyncSession,
+    *,
+    revision: ProjectWorkflowRevision,
+) -> ProjectWorkflowRevision:
+    """事务内恢复完整项目快照；版本历史和文件实体本身不回滚。"""
+    project_id = revision.project_id
+    snapshot = dict(revision.snapshot or {})
+    if not snapshot.get("project"):
+        raise ValueError("Revision snapshot is empty")
+
+    current_chapter_ids = select(Chapter.id).where(Chapter.project_id == project_id)
+    current_shot_ids = select(Shot.id).where(Shot.chapter_id.in_(current_chapter_ids))
+    current_character_ids = select(Character.id).where(Character.project_id == project_id)
+    current_scene_ids = select(Scene.id).where(Scene.project_id == project_id)
+    current_prop_ids = select(Prop.id).where(Prop.project_id == project_id)
+    current_costume_ids = select(Costume.id).where(Costume.project_id == project_id)
+    current_actor_ids = select(Actor.id).where(Actor.project_id == project_id)
+
+    delete_steps = [
+        (ShotExtractedDialogueCandidate, ShotExtractedDialogueCandidate.shot_id.in_(current_shot_ids)),
+        (ShotExtractedCandidate, ShotExtractedCandidate.shot_id.in_(current_shot_ids)),
+        (ShotDialogLine, ShotDialogLine.shot_detail_id.in_(current_shot_ids)),
+        (ShotCharacterLink, ShotCharacterLink.shot_id.in_(current_shot_ids)),
+        (ProjectActorLink, ProjectActorLink.project_id == project_id),
+        (ProjectSceneLink, ProjectSceneLink.project_id == project_id),
+        (ProjectPropLink, ProjectPropLink.project_id == project_id),
+        (ProjectCostumeLink, ProjectCostumeLink.project_id == project_id),
+        (ShotFrameImage, ShotFrameImage.shot_detail_id.in_(current_shot_ids)),
+        (ShotDetail, ShotDetail.id.in_(current_shot_ids)),
+        (Shot, Shot.chapter_id.in_(current_chapter_ids)),
+        (CharacterPropLink, CharacterPropLink.character_id.in_(current_character_ids)),
+        (CharacterImage, CharacterImage.character_id.in_(current_character_ids)),
+        (Character, Character.project_id == project_id),
+        (SceneImage, SceneImage.scene_id.in_(current_scene_ids)),
+        (PropImage, PropImage.prop_id.in_(current_prop_ids)),
+        (CostumeImage, CostumeImage.costume_id.in_(current_costume_ids)),
+        (Scene, Scene.project_id == project_id),
+        (Prop, Prop.project_id == project_id),
+        (Costume, Costume.project_id == project_id),
+        (ProjectBrainEntry, ProjectBrainEntry.project_id == project_id),
+        (Chapter, Chapter.project_id == project_id),
+    ]
+    if "actors" in snapshot:
+        delete_steps[16:16] = [
+            (ActorImage, ActorImage.actor_id.in_(current_actor_ids)),
+            (Actor, Actor.project_id == project_id),
+        ]
+    for model, criterion in delete_steps:
+        await db.execute(delete(model).where(criterion))
+    await db.flush()
+
+    project = await db.get(Project, project_id)
+    for key, value in _restore_payload(Project, snapshot["project"]).items():
+        if key not in {"id", "created_at", "updated_at"}:
+            setattr(project, key, value)
+
+    for key, model in (
+        ("chapters", Chapter), ("brain", ProjectBrainEntry),
+        ("actors", Actor), ("scenes", Scene), ("props", Prop), ("costumes", Costume),
+        ("characters", Character), ("character_prop_links", CharacterPropLink),
+        ("shots", Shot), ("shot_details", ShotDetail),
+        ("dialog_lines", ShotDialogLine), ("shot_character_links", ShotCharacterLink),
+        ("shot_extracted_candidates", ShotExtractedCandidate),
+        ("shot_extracted_dialogue_candidates", ShotExtractedDialogueCandidate),
+        ("project_actor_links", ProjectActorLink), ("project_scene_links", ProjectSceneLink),
+        ("project_prop_links", ProjectPropLink), ("project_costume_links", ProjectCostumeLink),
+        ("character_images", CharacterImage), ("scene_images", SceneImage),
+        ("prop_images", PropImage), ("costume_images", CostumeImage),
+        ("actor_images", ActorImage), ("frame_images", ShotFrameImage),
+    ):
+        if key == "actor_images" and "actors" not in snapshot:
+            continue
+        await _insert_snapshot_rows(db, snapshot, key, model)
+
+    await db.execute(update(ProjectWorkflowInvalidation).where(
+        ProjectWorkflowInvalidation.project_id == project_id,
+        ProjectWorkflowInvalidation.status == "pending",
+    ).values(status="resolved"))
+    revision.restored = True
+    await db.flush()
+    await db.refresh(revision)
+    return revision
 
 
 async def capture_revision(
@@ -155,4 +274,4 @@ async def capture_revision(
     return revision, impact
 
 
-__all__ = ["STEP_LABELS", "STEP_ORDER", "capture_revision", "project_impact"]
+__all__ = ["STEP_LABELS", "STEP_ORDER", "capture_revision", "project_impact", "restore_revision"]

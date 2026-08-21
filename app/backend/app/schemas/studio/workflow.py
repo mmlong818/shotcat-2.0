@@ -46,6 +46,15 @@ class WorkflowRevisionSnapshotRead(BaseModel):
     snapshot: dict
 
 
+class WorkflowRevisionRestoreRequest(BaseModel):
+    confirm: bool
+
+
+class WorkflowRevisionRestoreRead(BaseModel):
+    restored_revision: WorkflowRevisionRead
+    safety_revision_id: str
+
+
 class WorkflowInvalidationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -70,5 +79,5 @@ class WorkflowStepComplete(BaseModel):
 __all__ = [
     "WorkflowImpactItem", "WorkflowImpactRead", "WorkflowRevisionCreate",
     "WorkflowRevisionRead", "WorkflowInvalidationRead", "WorkflowInvalidationResolve", "WorkflowStepComplete",
-    "WorkflowRevisionSnapshotRead",
+    "WorkflowRevisionSnapshotRead", "WorkflowRevisionRestoreRequest", "WorkflowRevisionRestoreRead",
 ]

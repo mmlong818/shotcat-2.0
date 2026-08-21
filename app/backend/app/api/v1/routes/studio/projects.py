@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 from urllib.parse import quote
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import ValidationError
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.utils import apply_keyword_filter, apply_order, paginate
 from app.dependencies import get_db
-from app.models.studio import Project
+from app.models.studio import Project, ProjectBrainEntry
+from app.models.studio_project_brain import ProjectBrainCategory, ProjectBrainOrigin, ProjectBrainStatus
 from app.models.types import ProjectStyle, ProjectVisualStyle
 from app.schemas.common import ApiResponse, PaginatedData, created_response, empty_response, paginated_response, success_response
 from app.services.common import (
@@ -26,6 +29,7 @@ from app.services.common import (
 )
 from app.schemas.studio.projects import (
     ProjectCreate,
+    ProjectBrief,
     ProjectRead,
     ProjectStyleOptionsRead,
     ProjectUpdate,
@@ -37,6 +41,49 @@ from app.services.studio.keyframe_export import iter_file_archive, iter_keyframe
 router = APIRouter()
 
 PROJECT_ORDER_FIELDS = {"name", "created_at", "updated_at", "progress"}
+
+
+def _normalize_project_stats(stats: dict) -> tuple[dict, ProjectBrief | None]:
+    normalized = dict(stats or {})
+    raw_brief = normalized.get("project_brief")
+    if raw_brief is None:
+        return normalized, None
+    try:
+        brief = ProjectBrief.model_validate(raw_brief)
+    except ValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid project brief") from exc
+    normalized["project_brief"] = brief.model_dump()
+    return normalized, brief
+
+
+def _brief_brain_entries(project_id: str, brief: ProjectBrief) -> list[ProjectBrainEntry]:
+    common = {
+        "project_id": project_id,
+        "origin": ProjectBrainOrigin.user,
+        "status": ProjectBrainStatus.confirmed,
+        "source_ref": "项目创建简报",
+        "evidence": [],
+        "locked": True,
+        "version": 1,
+    }
+    entries = [ProjectBrainEntry(
+        id=f"brain_{uuid4().hex}", category=ProjectBrainCategory.narrative,
+        title="制作规格",
+        content=f"{brief.format}；目标时长约 {brief.runtime_minutes} 分钟"
+                + (f"；核心受众：{brief.audience}" if brief.audience else ""),
+        **common,
+    )]
+    if brief.tone:
+        entries.append(ProjectBrainEntry(
+            id=f"brain_{uuid4().hex}", category=ProjectBrainCategory.style,
+            title="情绪基调", content=brief.tone, **common,
+        ))
+    if brief.premise:
+        entries.append(ProjectBrainEntry(
+            id=f"brain_{uuid4().hex}", category=ProjectBrainCategory.narrative,
+            title="故事承诺", content=brief.premise, **common,
+        ))
+    return entries
 
 
 def _build_project_style_options() -> tuple[dict[ProjectVisualStyle, list[ProjectStyle]], dict[ProjectVisualStyle, ProjectStyle]]:
@@ -167,7 +214,12 @@ async def create_project(
         _validate_project_style_combo(visual_style=body.visual_style, style=body.style)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    obj = await create_and_refresh(db, Project(**body.model_dump()))
+    payload = body.model_dump()
+    payload["stats"], brief = _normalize_project_stats(payload.get("stats") or {})
+    obj = await create_and_refresh(db, Project(**payload))
+    if brief is not None:
+        db.add_all(_brief_brain_entries(obj.id, brief))
+        await db.flush()
     return created_response(ProjectRead.model_validate(obj))
 
 

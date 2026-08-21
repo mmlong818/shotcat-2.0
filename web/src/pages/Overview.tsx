@@ -30,6 +30,7 @@ export default function Overview({ project, onRatioChange }: { project: Project 
   const [err, setErr] = useState(false)
   const [invalidations, setInvalidations] = useState<WorkflowInvalidation[]>([])
   const [revisions, setRevisions] = useState<WorkflowRevision[]>([])
+  const [restoringId, setRestoringId] = useState<string | null>(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -70,6 +71,23 @@ export default function Overview({ project, onRatioChange }: { project: Project 
     anchor.download = `${project.name}-${revision.source_step}-v${revision.revision}.json`
     anchor.click()
     URL.revokeObjectURL(url)
+  }
+
+  const restoreRevision = async (revision: WorkflowRevision) => {
+    const accepted = window.confirm(
+      `恢复到“${revision.reason || `${revision.source_step} v${revision.revision}`}”？\n\n`
+      + '项目、剧本、设定、分镜和画面记录将回到该快照。系统会先自动保存当前状态，恢复后仍可撤回。',
+    )
+    if (!accepted) return
+    setRestoringId(revision.id)
+    try {
+      const result = await api.restoreWorkflowRevision(project.id, revision.id)
+      window.alert(`恢复完成。恢复前状态已保存为安全版本 ${result.safety_revision_id.slice(-8)}。`)
+      window.location.reload()
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : '恢复失败，请稍后重试')
+      setRestoringId(null)
+    }
   }
 
   return (
@@ -123,14 +141,19 @@ export default function Overview({ project, onRatioChange }: { project: Project 
 
       {revisions.length > 0 && (
         <section className="ov-history" aria-label="项目版本记录">
-          <div className="ov-history-head"><strong>版本记录</strong><span>系统在重做前自动保存，可导出完整数据快照。</span></div>
+          <div className="ov-history-head"><strong>版本记录</strong><span>系统在重做前自动保存，可导出或恢复完整数据快照。</span></div>
           <div className="ov-history-list">
             {revisions.slice(0, 6).map((revision) => (
-              <button key={revision.id} type="button" className="ov-history-row" onClick={() => void downloadRevision(revision)}>
+              <div key={revision.id} className="ov-history-row">
                 <span>{revision.reason || `${revision.source_step} 重做前保存`}</span>
                 <em>{revision.source_step} · v{revision.revision}</em>
-                <i>导出快照 ↓</i>
-              </button>
+                <div className="ov-history-actions">
+                  <button type="button" onClick={() => void downloadRevision(revision)}>导出</button>
+                  <button type="button" className="restore" disabled={restoringId !== null} onClick={() => void restoreRevision(revision)}>
+                    {restoringId === revision.id ? '恢复中…' : revision.restored ? '再次恢复' : '恢复'}
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         </section>

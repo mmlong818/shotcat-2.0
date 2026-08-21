@@ -10,11 +10,12 @@ from app.schemas.common import ApiResponse, created_response, success_response
 from app.schemas.studio.workflow import (
     WorkflowImpactRead, WorkflowInvalidationRead, WorkflowInvalidationResolve,
     WorkflowRevisionCreate, WorkflowRevisionRead,
+    WorkflowRevisionRestoreRead, WorkflowRevisionRestoreRequest,
     WorkflowRevisionSnapshotRead,
     WorkflowStepComplete,
 )
 from app.services.common import entity_not_found, get_or_404
-from app.services.studio.workflow import capture_revision, project_impact
+from app.services.studio.workflow import capture_revision, project_impact, restore_revision
 
 router = APIRouter()
 
@@ -95,6 +96,38 @@ async def get_workflow_revision_snapshot(
         source_step=row.source_step,
         revision=row.revision,
         snapshot=dict(row.snapshot or {}),
+    ))
+
+
+@router.post(
+    "/revisions/{revision_id}/restore",
+    response_model=ApiResponse[WorkflowRevisionRestoreRead],
+    summary="恢复项目快照，并先保存当前状态",
+)
+async def restore_workflow_revision(
+    project_id: str,
+    revision_id: str,
+    body: WorkflowRevisionRestoreRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[WorkflowRevisionRestoreRead]:
+    if body.confirm is not True:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Restore confirmation is required")
+    row = await get_or_404(db, ProjectWorkflowRevision, revision_id, detail="Workflow revision not found")
+    if row.project_id != project_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow revision not found")
+    safety_revision, _ = await capture_revision(
+        db,
+        project_id=project_id,
+        source_step=row.source_step,
+        reason=f"恢复 {row.source_step} v{row.revision} 前自动保存",
+    )
+    try:
+        restored = await restore_revision(db, revision=row)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return success_response(WorkflowRevisionRestoreRead(
+        restored_revision=WorkflowRevisionRead.model_validate(restored),
+        safety_revision_id=safety_revision.id,
     ))
 
 

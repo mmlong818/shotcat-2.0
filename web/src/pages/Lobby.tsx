@@ -4,12 +4,17 @@ import { api, fileUrl, type Project } from '../lib/api'
 const STYLES = ['真人都市', '真人科幻', '真人古装', '动漫科幻', '动漫3D', '国漫', '水墨画']
 const VISUALS = ['现实', '动漫']
 const RATIOS = ['9:16', '16:9', '1:1', '4:3', '3:4', '2:3', '3:2', '21:9']
+const FORMATS = ['竖屏漫剧', '竖屏真人短剧', '横屏短片', '系列剧']
+const EMPTY_FORM = {
+  name: '', style: '真人都市', visual_style: '现实', default_video_ratio: '9:16',
+  format: '竖屏漫剧', runtime_minutes: 3, audience: '', tone: '', premise: '',
+}
 
 export default function Lobby({ onOpen }: { onOpen: (p: Project) => void }) {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
-  const [form, setForm] = useState({ name: '', style: '真人都市', visual_style: '现实', default_video_ratio: '9:16', description: '' })
+  const [form, setForm] = useState(EMPTY_FORM)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [covers, setCovers] = useState<Record<string, string>>({}) // 项目封面：第一个有图镜头的关键帧
@@ -40,10 +45,26 @@ export default function Lobby({ onOpen }: { onOpen: (p: Project) => void }) {
     setBusy(true); setErr('')
     try {
       const name = form.name.trim()
-      const id = await api.createProject({ ...form, name })
+      const description = form.premise.trim()
+      const stats = {
+        project_brief: {
+          format: form.format,
+          runtime_minutes: form.runtime_minutes,
+          audience: form.audience.trim(),
+          tone: form.tone.trim(),
+          premise: description,
+        },
+      }
+      const id = await api.createProject({
+        name, description, stats, style: form.style, visual_style: form.visual_style,
+        default_video_ratio: form.default_video_ratio,
+      })
       setCreating(false)
-      const created = { ...form, id, name, progress: 0 }
-      setForm({ name: '', style: '真人都市', visual_style: '现实', default_video_ratio: '9:16', description: '' })
+      const created = {
+        id, name, description, stats, progress: 0, style: form.style,
+        visual_style: form.visual_style, default_video_ratio: form.default_video_ratio,
+      }
+      setForm(EMPTY_FORM)
       // 后端 commit-after-yield：创建后立刻拉列表可能还查不到新项目（时序缝隙），
       // 直接用表单数据构造项目对象进入，不依赖回读
       onOpen(created)
@@ -100,30 +121,56 @@ export default function Lobby({ onOpen }: { onOpen: (p: Project) => void }) {
 
       {creating && (
         <div className="modal-mask" onClick={() => !busy && setCreating(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal project-create-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-h">新建剧本项目</div>
+            <div className="modal-note">先定下制作边界。创建后这些选择会写入项目大脑，后续 AI 不会擅自覆盖。</div>
             <label className="fld"><span>剧名</span>
               <input autoFocus value={form.name} placeholder="例：替身总裁的辞职信"
                 onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </label>
-            <label className="fld"><span>题材风格</span>
-              <select value={form.style} onChange={(e) => setForm({ ...form, style: e.target.value })}>
-                {STYLES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
+            <div className="project-create-grid">
+              <label className="fld"><span>制作形态</span>
+                <select value={form.format} onChange={(e) => setForm({ ...form, format: e.target.value })}>
+                  {FORMATS.map((value) => <option key={value} value={value}>{value}</option>)}
+                </select>
+              </label>
+              <label className="fld"><span>目标时长（分钟）</span>
+                <input type="number" min={1} max={600} value={form.runtime_minutes}
+                  onChange={(e) => setForm({ ...form, runtime_minutes: Math.max(1, Number(e.target.value) || 1) })} />
+              </label>
+              <label className="fld"><span>题材风格</span>
+                <select value={form.style} onChange={(e) => setForm({ ...form, style: e.target.value })}>
+                  {STYLES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </label>
+              <label className="fld"><span>画面表现</span>
+                <select value={form.visual_style} onChange={(e) => {
+                  const visual_style = e.target.value
+                  const style = visual_style === '动漫'
+                    ? (form.style.startsWith('真人') ? '动漫科幻' : form.style)
+                    : (!form.style.startsWith('真人') ? '真人都市' : form.style)
+                  setForm({ ...form, visual_style, style })
+                }}>
+                  {VISUALS.map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </label>
+              <label className="fld"><span>画幅比例</span>
+                <select value={form.default_video_ratio} onChange={(e) => setForm({ ...form, default_video_ratio: e.target.value })}>
+                  {RATIOS.map((r) => <option key={r} value={r}>{r}{r === '9:16' ? '（竖屏）' : r === '16:9' ? '（横屏）' : ''}</option>)}
+                </select>
+              </label>
+              <label className="fld"><span>核心受众</span>
+                <input value={form.audience} placeholder="例：18–35 岁悬疑短剧观众"
+                  onChange={(e) => setForm({ ...form, audience: e.target.value })} />
+              </label>
+            </div>
+            <label className="fld"><span>情绪基调</span>
+              <input value={form.tone} placeholder="例：克制、悬疑，偶尔黑色幽默"
+                onChange={(e) => setForm({ ...form, tone: e.target.value })} />
             </label>
-            <label className="fld"><span>画面表现</span>
-              <select value={form.visual_style} onChange={(e) => setForm({ ...form, visual_style: e.target.value })}>
-                {VISUALS.map((v) => <option key={v} value={v}>{v}</option>)}
-              </select>
-            </label>
-            <label className="fld"><span>画幅比例</span>
-              <select value={form.default_video_ratio} onChange={(e) => setForm({ ...form, default_video_ratio: e.target.value })}>
-                {RATIOS.map((r) => <option key={r} value={r}>{r}{r === '9:16' ? '（竖屏·短剧）' : r === '16:9' ? '（横屏）' : ''}</option>)}
-              </select>
-            </label>
-            <label className="fld"><span>一句话简介</span>
-              <input value={form.description} placeholder="选填"
-                onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            <label className="fld"><span>一句话故事</span>
+              <input value={form.premise} placeholder="主角是谁、遇到什么、必须做出什么选择"
+                onChange={(e) => setForm({ ...form, premise: e.target.value })} />
             </label>
             {err && <div className="fld-err">{err}</div>}
             <div className="modal-foot">

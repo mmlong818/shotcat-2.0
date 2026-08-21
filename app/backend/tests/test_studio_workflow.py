@@ -13,7 +13,7 @@ from app.models.studio import (
     ShotDetail,
     ShotFrameImage,
 )
-from app.services.studio.workflow import capture_revision, project_impact
+from app.services.studio.workflow import capture_revision, project_impact, restore_revision
 
 
 async def _build_session() -> tuple[AsyncSession, object]:
@@ -75,4 +75,39 @@ async def test_revision_numbers_are_per_project_and_source_step() -> None:
         other_step, _ = await capture_revision(db, project_id="p1", source_step="cast", reason="设定")
 
         assert (first.revision, second.revision, other_step.revision) == (1, 2, 1)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_restore_revision_replaces_project_content_and_resolves_invalidations() -> None:
+    db, engine = await _build_session()
+    async with db:
+        db.add(Project(id="p1", name="测试项目", style="drama"))
+        db.add(Chapter(id="c1", project_id="p1", index=1, title="第一集", raw_text="快照剧本"))
+        db.add(Shot(id="s1", chapter_id="c1", index=1, title="镜头一", script_excerpt="快照镜头"))
+        db.add(ShotDetail(id="s1", camera_shot="MS", angle="EYE_LEVEL", movement="STATIC"))
+        db.add(ShotFrameImage(shot_detail_id="s1", frame_type="first", format="png"))
+        await db.flush()
+
+        revision, _ = await capture_revision(db, project_id="p1", source_step="script", reason="修改前")
+        chapter = await db.get(Chapter, "c1")
+        shot = await db.get(Shot, "s1")
+        assert chapter is not None and shot is not None
+        chapter.raw_text = "已经改坏"
+        shot.script_excerpt = "已经改坏"
+        db.add(Shot(id="s2", chapter_id="c1", index=2, title="多余镜头", script_excerpt="不应保留"))
+        await db.flush()
+
+        restored = await restore_revision(db, revision=revision)
+        assert restored.restored is True
+        db.expire_all()
+
+        restored_chapter = await db.get(Chapter, "c1")
+        restored_shots = list((await db.execute(select(Shot).order_by(Shot.index))).scalars().all())
+        pending = list((await db.execute(select(ProjectWorkflowInvalidation).where(
+            ProjectWorkflowInvalidation.status == "pending"
+        ))).scalars().all())
+        assert restored_chapter is not None and restored_chapter.raw_text == "快照剧本"
+        assert [(item.id, item.script_excerpt) for item in restored_shots] == [("s1", "快照镜头")]
+        assert pending == []
     await engine.dispose()

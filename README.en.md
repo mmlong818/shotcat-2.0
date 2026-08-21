@@ -110,7 +110,7 @@ Git synchronizes code and documentation only. Back up the database and generated
 
 - Python 3.11+
 - Node.js 18+ and pnpm
-- Text-model and image-model APIs; each can use a different provider, model, and API key
+- An image-model API. Text Pipeline tasks can use an external API or reuse a locally authenticated Codex CLI.
 - Optional Redis and Celery worker. Without them, tasks fall back to local backend execution.
 
 ### 1. Start the backend
@@ -143,6 +143,15 @@ python pipeline_server.py
 
 Service URL: <http://127.0.0.1:5280>
 
+To run setup extraction, Project Brain analysis, and shot breakdown through the locally authenticated Codex provider, set this before starting Pipeline:
+
+```powershell
+$env:SHOTCAT_TEXT_PROVIDER="codex"
+python pipeline_server.py
+```
+
+Optionally set `SHOTCAT_CODEX_MODEL` to pin a Codex model. When omitted, Shotcat uses the current Codex default. This covers text tasks only; image generation still requires a separately configured image provider.
+
 ### 3. Start the workspace
 
 ```bash
@@ -153,11 +162,11 @@ pnpm dev
 
 Open <http://127.0.0.1:5273>.
 
-On first launch, if the database has no usable models, the workspace asks for separate text-model and image-model connections. Providers, model IDs, API URLs, and keys can be configured independently. Never commit real keys.
+On first launch, if the database has no usable models, the workspace asks for separate text-model and image-model connections. Providers, model IDs, API URLs, and keys can be configured independently. Never commit real keys. When Pipeline uses Codex, Shotcat neither reads nor stores Codex credentials; it only invokes the locally authenticated Codex CLI.
 
 ## Usage
 
-1. Create or open a project and enter chapter text on the Script page.
+1. Fill in the creative brief, create a project, and enter chapter text on the Script page. The brief becomes locked project rules.
 2. Run setup extraction and review the full-script character, scene, and prop categories.
 3. Confirm base assets and derived states on the Setup page, refine descriptions, and generate or upload reference designs.
 4. Run AI shot breakdown on the Storyboard page, review director feedback, and confirm required corrections.

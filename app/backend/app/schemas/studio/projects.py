@@ -12,6 +12,14 @@ from app.models.studio import ChapterStatus, ProjectStyle, ProjectVisualStyle
 PROJECT_STYLE_EXAMPLES = [x.value for x in ProjectStyle]
 
 
+class ProjectBrief(BaseModel):
+    format: str = Field(..., min_length=1, max_length=64, description="制作形态")
+    runtime_minutes: int = Field(..., ge=1, le=600, description="目标时长（分钟）")
+    audience: str = Field("", max_length=255, description="核心受众")
+    tone: str = Field("", max_length=255, description="情绪基调")
+    premise: str = Field("", max_length=2000, description="一句话故事承诺")
+
+
 class ProjectBase(BaseModel):
     name: str = Field(..., description="项目名称")
     description: str = Field("", description="项目简介")

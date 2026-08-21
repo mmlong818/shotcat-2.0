@@ -40,7 +40,7 @@ async function put<T = any>(path: string, body: any): Promise<T> {
   return (j?.data ?? j) as T
 }
 
-export interface Project { id: string; name: string; description?: string; style?: string; visual_style?: string; progress?: number; default_video_ratio?: string }
+export interface Project { id: string; name: string; description?: string; style?: string; visual_style?: string; progress?: number; default_video_ratio?: string; stats?: Record<string, unknown> }
 export type ProjectBrainCategory = 'fact' | 'character' | 'environment' | 'prop' | 'style' | 'narrative' | 'continuity'
 export type ProjectBrainOrigin = 'source' | 'user' | 'ai'
 export type ProjectBrainStatus = 'draft' | 'confirmed' | 'rejected'
@@ -157,6 +157,10 @@ export interface WorkflowRevision {
 export interface WorkflowRevisionSnapshot {
   id: string; project_id: string; source_step: string; revision: number; snapshot: Record<string, unknown>
 }
+export interface WorkflowRevisionRestore {
+  restored_revision: WorkflowRevision
+  safety_revision_id: string
+}
 
 export const PIPELINE_JOB_EVENT = 'shotcat:pipeline-jobs-changed'
 const PIPELINE_JOB_STORAGE_KEY = 'shotcat.pipeline.jobs.v1'
@@ -263,6 +267,8 @@ export const api = {
     get<WorkflowRevision[]>(`/studio/projects/${encodeURIComponent(projectId)}/workflow/revisions`),
   workflowRevisionSnapshot: (projectId: string, revisionId: string) =>
     get<WorkflowRevisionSnapshot>(`/studio/projects/${encodeURIComponent(projectId)}/workflow/revisions/${encodeURIComponent(revisionId)}/snapshot`),
+  restoreWorkflowRevision: (projectId: string, revisionId: string) =>
+    post<WorkflowRevisionRestore>(`/studio/projects/${encodeURIComponent(projectId)}/workflow/revisions/${encodeURIComponent(revisionId)}/restore`, { confirm: true }),
   resolveWorkflowInvalidation: (projectId: string, invalidationId: number) =>
     fetch(`${BASE}/studio/projects/${encodeURIComponent(projectId)}/workflow/invalidations/${invalidationId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'resolved' }),
@@ -294,7 +300,7 @@ export const api = {
       const j = await r.json().catch(() => null)
       if (!r.ok) throw new Error(j?.message || `删除失败 ${r.status}`)
     }),
-  createProject: (body: { name: string; style: string; visual_style: string; default_video_ratio?: string; description?: string }) => {
+  createProject: (body: { name: string; style: string; visual_style: string; default_video_ratio?: string; description?: string; stats?: Record<string, unknown> }) => {
     const id = 'proj_' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36)
     return post<Project>('/studio/projects', { id, description: '', ...body }).then(() => id)
   },
