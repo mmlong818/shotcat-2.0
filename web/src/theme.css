@@ -338,9 +338,9 @@ img.zoomable{cursor:zoom-in}
 .ov-impact-row:last-child{border-bottom:0}.ov-impact-row:hover,.ov-impact-row:focus-visible{background:rgba(217,154,62,.08);outline:none}.ov-impact-row em{font-style:normal;color:var(--text-3);font-size:12px}.ov-impact-row i{font-style:normal;color:var(--gold);font-size:12px}
 .ov-stage{background:var(--surface-2);border-radius:var(--r);padding:22px 18px;cursor:pointer;border:1px solid transparent;transition:.15s}
 .ov-stage:hover{background:var(--surface-3);border-color:var(--gold-line);transform:translateY(-2px)}
-/* 主入口（分镜）：顶部渐变条 + 描边 + 继续标签 */
-.ov-stage.main{position:relative;overflow:hidden;border-color:var(--gold-line)}
-.ov-stage.main::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;
+/* 上次工作步骤：顶部渐变条 + 描边 + 继续标签。 */
+.ov-stage.resume{position:relative;overflow:hidden;border-color:var(--gold-line)}
+.ov-stage.resume::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;
   background:linear-gradient(90deg,var(--teal),var(--accent))}
 .ov-stage .os-go{position:absolute;right:16px;bottom:20px;padding:4px 14px;border-radius:6px;
   background:var(--accent-soft);color:var(--accent);font-size:12px;border:1px solid var(--gold-line)}

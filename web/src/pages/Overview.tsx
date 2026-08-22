@@ -2,13 +2,16 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type Project, type WorkflowInvalidation, type WorkflowRevision } from '../lib/api'
 
-type Stats = { chapters: number; character: number; scene: number; prop: number; costume: number; actor: number; shots: number }
+type Stats = {
+  chapters: number; character: number; scene: number; prop: number; costume: number; actor: number; shots: number
+  brainTotal: number; brainConfirmed: number; framedShots: number
+}
 
-const STAGES: { to: string; label: string; desc: string; icon: string; main?: boolean }[] = [
+const STAGES: { to: string; label: string; desc: string; icon: string }[] = [
   { to: '/script', label: '剧本', desc: '接原点产出 · 分集正文', icon: 'script' },
   { to: '/brain', label: '大脑', desc: '确认项目事实 · 锁定创作规则', icon: 'brain' },
   { to: '/cast', label: '设定', desc: '角色/场景/道具/服装 + 造型图', icon: 'cast' },
-  { to: '/board', label: '分镜', desc: '镜头级时序 · 景别机位', icon: 'board', main: true },
+  { to: '/board', label: '分镜', desc: '镜头级时序 · 景别机位', icon: 'board' },
   { to: '/frames', label: '画面', desc: '关键帧 · 生图', icon: 'frames' },
   { to: '/gallery', label: '总览', desc: '全集画面一览', icon: 'gallery' },
 ]
@@ -25,7 +28,11 @@ function SIcon({ n }: { n: string }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">{p[n]}</svg>
 }
 
-export default function Overview({ project, onRatioChange }: { project: Project | null; onRatioChange?: (r: string) => void }) {
+export default function Overview({ project, onRatioChange, resumeStage }: {
+  project: Project | null
+  onRatioChange?: (r: string) => void
+  resumeStage?: string | null
+}) {
   const [st, setSt] = useState<Stats | null>(null)
   const [err, setErr] = useState(false)
   const [invalidations, setInvalidations] = useState<WorkflowInvalidation[]>([])
@@ -44,12 +51,22 @@ export default function Overview({ project, onRatioChange }: { project: Project 
       api.entities('prop', pid).catch(() => []),
       api.entities('costume', pid).catch(() => []),
       api.entities('actor', pid).catch(() => []),
+      api.projectBrainSummary(pid).catch(() => ({ total: 0, confirmed: 0, locked: 0, ai_drafts: 0, by_category: {} })),
       api.workflowInvalidations(pid).catch(() => []),
       api.workflowRevisions(pid).catch(() => []),
-    ]).then(async ([chs, ch, sc, pr, co, ac, stale, history]) => {
-      let shots = 0
-      for (const c of chs) shots += (await api.shots(c.id).catch(() => [])).length
-      setSt({ chapters: chs.length, character: ch.length, scene: sc.length, prop: pr.length, costume: co.length, actor: ac.length, shots })
+    ]).then(async ([chs, ch, sc, pr, co, ac, brain, stale, history]) => {
+      const shotLists = await Promise.all(chs.map((c) => api.shots(c.id).catch(() => [])))
+      const allShots = shotLists.flat()
+      const shots = allShots.length
+      const frameIndex = await api.frameIndex().catch(() => ({} as Record<string, Partial<Record<'first' | 'key' | 'last', string>>>))
+      const framedShots = allShots.filter((shot) => {
+        const frames = frameIndex[shot.id]
+        return Boolean(frames && (frames.first || frames.key || frames.last))
+      }).length
+      setSt({
+        chapters: chs.length, character: ch.length, scene: sc.length, prop: pr.length, costume: co.length,
+        actor: ac.length, shots, brainTotal: brain.total, brainConfirmed: brain.confirmed, framedShots,
+      })
       setInvalidations(stale)
       setRevisions(history)
     }).catch(() => setErr(true))
@@ -61,6 +78,13 @@ export default function Overview({ project, onRatioChange }: { project: Project 
     { k: '集数', v: st.chapters }, { k: '角色', v: st.character }, { k: '场景', v: st.scene },
     { k: '道具', v: st.prop }, { k: '服装', v: st.costume }, { k: '镜头', v: st.shots },
   ] : []
+
+  const inferredStage = !st || st.chapters === 0 ? '/script'
+    : st.brainTotal === 0 || st.brainConfirmed < st.brainTotal ? '/brain'
+      : st.character + st.scene + st.prop + st.costume === 0 ? '/cast'
+        : st.shots === 0 ? '/board'
+          : st.framedShots < st.shots ? '/frames' : '/gallery'
+  const activeStage = STAGES.some((stage) => stage.to === resumeStage) ? resumeStage : inferredStage
 
   const downloadRevision = async (revision: WorkflowRevision) => {
     const payload = await api.workflowRevisionSnapshot(project.id, revision.id)
@@ -161,14 +185,17 @@ export default function Overview({ project, onRatioChange }: { project: Project 
 
       <div className="ov-stages-h">进入创作阶段</div>
       <div className="ov-stages">
-        {STAGES.map((s) => (
-          <div className={s.main ? 'ov-stage main' : 'ov-stage'} key={s.to} onClick={() => navigate(s.to)}>
-            <div className="os-icon"><SIcon n={s.icon} /></div>
-            <div className="os-label">{s.label}</div>
-            <div className="os-desc">{s.desc}</div>
-            {s.main && <span className="os-go">继续</span>}
-          </div>
-        ))}
+        {STAGES.map((s) => {
+          const isResume = s.to === activeStage
+          return (
+            <div className={isResume ? 'ov-stage resume' : 'ov-stage'} key={s.to} onClick={() => navigate(s.to)}>
+              <div className="os-icon"><SIcon n={s.icon} /></div>
+              <div className="os-label">{s.label}</div>
+              <div className="os-desc">{s.desc}</div>
+              {isResume && <span className="os-go">继续</span>}
+            </div>
+          )
+        })}
       </div>
     </div>
   )

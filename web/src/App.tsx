@@ -21,6 +21,7 @@ const STAGES = [
   { key: 'gallery', label: '总览', to: '/gallery' },
 ]
 const STAGE_PATHS = ['/script', '/brain', '/cast', '/board', '/frames', '/gallery', '/settings']
+const LAST_STAGE_KEY = 'duanju.last-stage.'
 
 function Icon({ name }: { name: string }) {
   const p: Record<string, JSX.Element> = {
@@ -88,6 +89,14 @@ export default function App() {
     localStorage.setItem('duanju.pid', p.id)
     navigate(entry)
   }
+
+  // 每个项目分别记住最后停留的创作步骤。返回项目概览时不覆盖这条记录，
+  // 因此再次打开已有项目仍先看到概览，同时能看到应该从哪里继续。
+  useEffect(() => {
+    if (!project) return
+    const stage = STAGES.find((item) => loc.pathname.startsWith(item.to))
+    if (stage) localStorage.setItem(LAST_STAGE_KEY + project.id, stage.to)
+  }, [project?.id, loc.pathname])
 
   // 真实进度：已出关键帧的镜头 ÷ 总镜头（后端 status 的"就绪"另有语义、从不翻转，不可用）
   useEffect(() => {
@@ -200,7 +209,9 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/projects" replace />} />
           <Route path="/projects" element={<Lobby onOpen={openProject} />} />
-          <Route path="/overview" element={<Overview project={project} onRatioChange={(r) => {
+          <Route path="/overview" element={<Overview project={project}
+            resumeStage={project ? localStorage.getItem(LAST_STAGE_KEY + project.id) : null}
+            onRatioChange={(r) => {
             const prev = project?.default_video_ratio || '9:16'
             setProject((p) => (p ? { ...p, default_video_ratio: r } : p))
             if (project) api.updateProject(project.id, { default_video_ratio: r }).catch(() => {
