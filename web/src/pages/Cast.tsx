@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { api, fileUrl, type AssetImageBatchStatus, type Entity, type EntityUsageShot, type Project } from '../lib/api'
+import { api, fileUrl, type AssetImageBatchStatus, type AssetReference, type Entity, type EntityUsageShot, type Project } from '../lib/api'
 import Lightbox from '../Lightbox'
 import { usePipelineJobActive } from '../TaskActivity'
 import { confirmOverwrite } from '../lib/confirmOverwrite'
@@ -87,6 +87,9 @@ export default function Cast({ project }: { project: Project | null }) {
   const [pipe, setPipe] = useState('') // 视觉词典生成中
   const pipelineActive = usePipelineJobActive(project?.id, 'visual-dict')
   const [angles, setAngles] = useState<Record<string, EntityImage[]>>({}) // 实体全部角度图
+  const [references, setReferences] = useState<AssetReference[]>([])
+  const [referenceQuery, setReferenceQuery] = useState('')
+  const [referenceBusy, setReferenceBusy] = useState('')
   const [lb, setLb] = useState<string | null>(null)
   const [promptEdits, setPromptEdits] = useState<Record<string, string>>({})
   const [promptResetTick, setPromptResetTick] = useState(0)
@@ -101,13 +104,15 @@ export default function Cast({ project }: { project: Project | null }) {
     return Promise.all([
       Promise.all(DATA_CATS.map((c) => api.entities(c.key, project.id).catch(() => [] as Entity[]))),
       Promise.all(CATS.map((c) => api.entityUsageSummary(c.key, project.id).catch(() => []))),
-    ]).then(([lists, usageLists]) => {
+      api.assetReferences(project.id).catch(() => [] as AssetReference[]),
+    ]).then(([lists, usageLists, referenceRows]) => {
       const map: Record<string, Entity[]> = {}
       DATA_CATS.forEach((c, i) => (map[c.key] = lists[i]))
       setData(map)
       const usageMap: Record<string, EntityUsageShot[]> = {}
       usageLists.flat().forEach((summary) => { usageMap[summary.entity_id] = summary.shots })
       setUsageByEntity(usageMap)
+      setReferences(referenceRows)
     })
   }
   useEffect(() => { void loadAll() }, [project])
@@ -166,6 +171,23 @@ export default function Cast({ project }: { project: Project | null }) {
   }, [project?.id])
 
   const items = data[tab] ?? []
+  const visibleReferences = references.filter((reference) => (
+    reference.entity_type === tab
+    && (!referenceQuery.trim() || reference.display_name.toLowerCase().includes(referenceQuery.trim().toLowerCase()))
+  ))
+
+  async function patchReference(reference: AssetReference, patch: Partial<Pick<AssetReference, 'display_name' | 'is_adopted' | 'is_locked'>>) {
+    if (!project || referenceBusy) return
+    setReferenceBusy(reference.id); setErr('')
+    try {
+      await api.updateAssetReference(project.id, reference.id, patch)
+      setReferences(await api.assetReferences(project.id))
+    } catch (error: any) {
+      setErr(error?.message || '参考版本更新失败')
+    } finally {
+      setReferenceBusy('')
+    }
+  }
 
   const loadEntityImages = async (type: string, id: string) => {
     const imgs = await api.entityImages(type, id).catch(() => [])
@@ -193,7 +215,7 @@ export default function Cast({ project }: { project: Project | null }) {
     return () => { stale = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, data])
-  const roleLabel = useMemo(() => CATS.find((c) => c.key === tab)?.label ?? '', [tab])
+  const roleLabel = useMemo(() => DATA_CATS.find((c) => c.key === tab)?.label ?? '', [tab])
   const thumbOf = (e: Entity) => (fresh[e.id] ? fileUrl(fresh[e.id]) : e.thumbnail || '')
   const visualDesc = (e: Entity | null) => visibleDescription(e?.description)
   const stateBase = (type: string, e: Entity) => {
@@ -350,7 +372,8 @@ export default function Cast({ project }: { project: Project | null }) {
   }
 
   async function gen(e: Entity) {
-    if (busy) return
+    if (!project || busy) return
+    const projectId = project.id
     if (thumbOf(e) && !confirmOverwrite({
       step: `重新生成「${e.name}」造型图`,
       replaces: ['当前造型图', '后续新生成镜头所使用的设定参考图'],
@@ -372,6 +395,7 @@ export default function Cast({ project }: { project: Project | null }) {
       const fid = await api.generateEntityImage(tab, e.id, prompt, references, (p) => setStage(`生成中… ${p}%`), () => cancelledRef.current)
       setFresh((m) => ({ ...m, [e.id]: fid }))
       await loadEntityImages(tab, e.id)
+      setReferences(await api.assetReferences(projectId))
     } catch (x: any) {
       setErr(`${e.name}：${x?.message || '生成失败'}`)
     } finally {
@@ -554,12 +578,58 @@ export default function Cast({ project }: { project: Project | null }) {
       </div>
 
       <div className="tabs">
-        {CATS.map((c) => (
+        {DATA_CATS.map((c) => (
           <button key={c.key} className={'tab' + (c.key === tab ? ' on' : '')} onClick={() => { setTab(c.key); setErr('') }}>
             {c.label} <span className="cnt">{(data[c.key] ?? []).length}</span>
           </button>
         ))}
       </div>
+
+      <section className="reference-rail" aria-label="参考资产轨">
+        <div className="reference-rail-head">
+          <div>
+            <div className="tone-title">参考资产轨</div>
+            <div className="tone-sub">每次上传或生成都保留版本；“已采用”会进入后续镜头，“已锁定”不会被新生成结果自动替换。</div>
+          </div>
+          <div className="reference-summary">
+            <span>已采用 {visibleReferences.filter((x) => x.is_adopted).length}</span>
+            <span>已锁定 {visibleReferences.filter((x) => x.is_locked).length}</span>
+            <input value={referenceQuery} onChange={(event) => setReferenceQuery(event.target.value)} placeholder="搜索参考名称" aria-label="搜索参考资产" />
+          </div>
+        </div>
+        <div className="reference-track">
+          {visibleReferences.map((reference) => (
+            <article className={`reference-card${reference.is_adopted ? ' adopted' : ''}`} key={reference.id}>
+              <button className="reference-preview" onClick={() => setLb(fileUrl(reference.file_id))} aria-label={`查看${reference.display_name}`}>
+                <img src={fileUrl(reference.file_id)} alt="" />
+              </button>
+              <div className="reference-meta">
+                <input
+                  defaultValue={reference.display_name}
+                  aria-label="参考版本名称"
+                  disabled={referenceBusy === reference.id}
+                  onBlur={(event) => {
+                    const name = event.target.value.trim()
+                    if (name && name !== reference.display_name) void patchReference(reference, { display_name: name })
+                  }}
+                />
+                <div className="reference-flags">
+                  <span>V{reference.version}</span>
+                  <span>{reference.source === 'upload' ? '用户上传' : 'AI 生成'}</span>
+                  {reference.is_adopted && <strong>已采用</strong>}
+                </div>
+                <div className="reference-actions">
+                  {!reference.is_adopted && <button className="btn ghost" onClick={() => void patchReference(reference, { is_adopted: true })}>采用</button>}
+                  <button className="btn ghost" onClick={() => void patchReference(reference, { is_locked: !reference.is_locked })}>
+                    {reference.is_locked ? '解除锁定' : '锁定'}
+                  </button>
+                </div>
+              </div>
+            </article>
+          ))}
+          {visibleReferences.length === 0 && <div className="reference-empty">首次上传或生成造型后，这里会保留可追溯版本。</div>}
+        </div>
+      </section>
 
       <div className="tone-panel">
         <div className="tone-head">

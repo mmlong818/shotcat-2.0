@@ -10,6 +10,7 @@ from app.models.types import FileUsageKind
 
 from app.models.studio import (
     Actor,
+    AssetReferenceVersion,
     ActorImage,
     Chapter,
     Character,
@@ -60,6 +61,7 @@ __all__ = [
     "ProjectCostumeLink",
     "ShotCharacterLink",
     "Actor",
+    "AssetReferenceVersion",
     "Character",
     "CharacterImage",
     "CharacterPropLink",

@@ -335,6 +335,8 @@ class ShotLinkedAssetItem(BaseModel):
     )
     name: str = Field(..., description="实体名称")
     thumbnail: str = Field("", description="缩略图下载地址（/api/v1/studio/files/{file_id}/download）")
+    reference_id: str | None = Field(None, description="已采用的稳定参考版本 ID")
+    reference_version: int | None = Field(None, description="已采用的参考版本号")
 
 
 class ShotFramePromptMappingRead(BaseModel):

@@ -85,6 +85,11 @@ export const MOVE_ZH: Record<string, string> = {
   CRANE: '摇臂', HANDHELD: '手持', STEADICAM: '稳定器', ZOOM_IN: '变焦推', ZOOM_OUT: '变焦拉',
 }
 export interface Entity { id: string; name: string; description?: string; thumbnail?: string; costume_id?: string }
+export interface AssetReference {
+  id: string; project_id: string; entity_type: string; entity_id: string; image_id: number | null
+  file_id: string; display_name: string; version: number; source: 'generated' | 'upload'
+  is_adopted: boolean; is_locked: boolean; created_at: string; updated_at: string
+}
 export interface EntityUsageShot { shot_id: string; chapter_id: string; shot_index: number; title: string }
 export interface EntityUsageSummary { entity_id: string; shots: EntityUsageShot[] }
 export interface EntityDeleteResult {
@@ -358,6 +363,16 @@ export const api = {
     get<Paged<Entity>>(`/studio/entities/${type}?project_id=${projectId}&page_size=100`).then((d) => d.items),
   entityUsageSummary: (type: string, projectId: string) =>
     get<EntityUsageSummary[]>(`/studio/entities/${type}/usage-summary?project_id=${projectId}`),
+  assetReferences: (projectId: string) =>
+    get<AssetReference[]>(`/studio/asset-references?project_id=${encodeURIComponent(projectId)}`),
+  updateAssetReference: (projectId: string, referenceId: string, patch: Partial<Pick<AssetReference, 'display_name' | 'is_adopted' | 'is_locked'>>) =>
+    fetch(`${BASE}/studio/asset-references/${encodeURIComponent(referenceId)}?project_id=${encodeURIComponent(projectId)}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
+    }).then(async (r) => {
+      const payload = await r.json().catch(() => null)
+      if (!r.ok) throw new Error(payload?.message || `参考版本更新失败 ${r.status}`)
+      return (payload?.data ?? payload) as AssetReference
+    }),
   updateEntity: (type: string, id: string, patch: Partial<Entity>) =>
     fetch(`${BASE}/studio/entities/${type}/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
@@ -389,6 +404,16 @@ export const api = {
       await fetch(`${BASE}/studio/files/${fileId}`, { method: 'DELETE' }).catch(() => null)
       throw new Error(linkedJson?.message || '设计稿已上传，但绑定造型失败')
     }
+    await post(`/studio/asset-references?project_id=${encodeURIComponent(projectId)}`, {
+      entity_type: type,
+      entity_id: id,
+      image_id: imageId,
+      file_id: fileId,
+      display_name: name,
+      source: 'upload',
+      adopt: true,
+      lock: true,
+    })
     return fileId
   },
   deleteEntity: async (type: string, id: string) => {
@@ -462,7 +487,7 @@ export const api = {
     ),
   // 镜头关联资产（角色/场景/道具）及各自最佳造型图 file_id——作帧生成参考图
   shotLinkedAssets: (shotId: string) =>
-    get<Paged<{ type: string; id: string; image_id: number | null; file_id: string | null; name: string; thumbnail?: string }>>(
+    get<Paged<{ type: string; id: string; image_id: number | null; file_id: string | null; name: string; thumbnail?: string; reference_id?: string | null; reference_version?: number | null }>>(
       `/studio/shots/${shotId}/linked-assets?page_size=50`,
     ).then((d) => d.items),
   // 取该镜头可用的参考图（角色优先→场景→道具，最多 6 张）：一致性的关键——
@@ -471,6 +496,9 @@ export const api = {
   // 场景从镜头详情补（同场景取最多 2 个不同角度），道具再按名称命中动作/台词文本补。
   async frameRefs(shotId: string, projectId?: string) {
     const order: Record<string, number> = { character: 0, prop: 1, scene: 2 }
+    const adoptedReferences = projectId
+      ? (await api.assetReferences(projectId).catch(() => [] as AssetReference[])).filter((item) => item.is_adopted)
+      : []
     const refs = (await api.shotLinkedAssets(shotId).catch(() => []))
       .filter((x) => x.file_id && x.type !== 'costume')
       .filter((x) => x.type !== 'character' || !isGenericCrowdCharacter(x.name))
@@ -482,8 +510,9 @@ export const api = {
       const text = [...(detail.action_beats || []), detail.description || ''].join('')
       const props = await api.entities('prop', projectId).catch(() => [] as Entity[])
       for (const p of props.filter((x) => x.name && text.includes(x.name)).slice(0, 2)) {
-        const im = (await api.entityImages('prop', p.id).catch(() => []))[0]
-        if (im?.file_id) refs.push({ type: 'prop', id: p.id, name: im.name || p.name, image_id: im.id, file_id: im.file_id })
+        const adopted = adoptedReferences.find((item) => item.entity_type === 'prop' && item.entity_id === p.id)
+        const im = adopted || (await api.entityImages('prop', p.id).catch(() => []))[0]
+        if (im?.file_id) refs.push({ type: 'prop', id: p.id, name: adopted?.display_name || im.name || p.name, image_id: im.image_id ?? im.id, file_id: im.file_id, reference_id: adopted?.id, reference_version: adopted?.version })
       }
     }
 
@@ -497,10 +526,14 @@ export const api = {
         sceneName = scenes.find((x) => x.id === detail.scene_id)?.name || ''
       }
       const imgs = (await api.entityImages('scene', detail.scene_id).catch(() => [])).filter((x: any) => x.file_id)
+      const adopted = adoptedReferences.find((item) => item.entity_type === 'scene' && item.entity_id === detail.scene_id)
+      if (adopted) {
+        refs.push({ type: 'scene', id: detail.scene_id, name: adopted.display_name, image_id: adopted.image_id, file_id: adopted.file_id, reference_id: adopted.id, reference_version: adopted.version })
+      }
       // 近景优先细节角度，远景优先主视角+反打
       const pref = ['ECU', 'CU', 'MCU'].includes(cam) ? ['DETAIL', 'FRONT', 'BACK'] : ['FRONT', 'BACK', 'DETAIL']
       imgs.sort((a: any, b: any) => pref.indexOf(a.view_angle) - pref.indexOf(b.view_angle))
-      imgs.slice(0, sceneQuota).forEach((im: any) =>
+      imgs.filter((im: any) => im.file_id !== adopted?.file_id).slice(0, sceneQuota - (adopted ? 1 : 0)).forEach((im: any) =>
         refs.push({ type: 'scene', id: detail.scene_id, name: im.name || sceneName || '场景参考图', image_id: im.id, file_id: im.file_id }))
     }
     return refs

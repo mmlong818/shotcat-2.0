@@ -23,6 +23,7 @@ from app.models.studio_project_brain import (
     ProjectBrainOrigin,
     ProjectBrainStatus,
 )
+from app.models.studio_asset_references import AssetReferenceVersion
 from app.models.studio_workflow import ProjectWorkflowInvalidation, ProjectWorkflowRevision
 from app.models.studio_projects import (
     Chapter,
@@ -111,6 +112,7 @@ __all__ = [
     "SceneImage",
     "PropImage",
     "CostumeImage",
+    "AssetReferenceVersion",
     "ProjectActorLink",
     "ProjectSceneLink",
     "ProjectPropLink",

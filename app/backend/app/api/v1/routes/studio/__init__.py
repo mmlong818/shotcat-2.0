@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.api.v1.routes.studio import (
     chapters,
+    asset_references,
     entities,
     files,
     image_tasks,
@@ -22,6 +23,7 @@ router.include_router(projects.router, prefix="/projects", tags=["studio/project
 router.include_router(project_brain.router, prefix="/projects/{project_id}/brain", tags=["studio/project-brain"])
 router.include_router(workflow.router, prefix="/projects/{project_id}/workflow", tags=["studio/workflow"])
 router.include_router(chapters.router, prefix="/chapters", tags=["studio/chapters"])
+router.include_router(asset_references.router, prefix="/asset-references", tags=["studio/asset-references"])
 
 router.include_router(shots.router, prefix="/shots", tags=["studio/shots"])
 router.include_router(shots.details_router, prefix="/shot-details", tags=["studio/shot-details"])

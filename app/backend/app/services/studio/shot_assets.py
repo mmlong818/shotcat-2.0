@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.utils import apply_order, paginate
 from app.models.studio import (
     Actor,
+    Chapter,
     Character,
     Costume,
     ProjectActorLink,
@@ -35,6 +36,7 @@ from app.services.common import delete_if_exists, entity_not_found, invalid_choi
 from app.services.studio.entity_specs import entity_spec, normalize_entity_type
 from app.services.studio.shot_extracted_candidates import mark_linked_by_name, mark_pending_by_name
 from app.services.studio.entity_thumbnails import resolve_thumbnail_infos, resolve_thumbnails
+from app.services.studio.asset_references import adopted_reference_map
 from app.utils.project_links import upsert_project_link
 
 
@@ -210,53 +212,88 @@ async def list_shot_linked_assets(
         parent_ids=list(costume_name.keys()),
     )
 
+    project_id = (await db.execute(
+        select(Chapter.project_id).join(Shot, Shot.chapter_id == Chapter.id).where(Shot.id == shot_id)
+    )).scalar_one()
+    adopted = await adopted_reference_map(
+        db,
+        project_id=project_id,
+        entities=(
+            [("character", value) for value in character_name]
+            + [("prop", value) for value in prop_name]
+            + [("scene", value) for value in scene_name]
+            + [("costume", value) for value in costume_name]
+        ),
+    )
+
+    def reference_info(entity_type: str, entity_id: str, fallback: dict[str, Any]) -> dict[str, Any]:
+        reference = adopted.get((entity_type, entity_id))
+        if reference is None:
+            return fallback
+        return {
+            "image_id": reference.image_id,
+            "file_id": reference.file_id,
+            "thumbnail": f"/api/v1/studio/files/{reference.file_id}/download",
+            "reference_id": reference.id,
+            "reference_version": reference.version,
+            "display_name": reference.display_name,
+        }
+
     items: list[ShotLinkedAssetItem] = []
     for cid, name in character_name.items():
-        info = character_thumb.get(cid) or {}
+        info = reference_info("character", cid, character_thumb.get(cid) or {})
         items.append(
             ShotLinkedAssetItem(
                 type="character",
                 id=cid,
                 image_id=info.get("image_id"),
                 file_id=info.get("file_id"),
-                name=name,
+                name=str(info.get("display_name") or name),
                 thumbnail=str(info.get("thumbnail") or ""),
+                reference_id=info.get("reference_id"),
+                reference_version=info.get("reference_version"),
             )
         )
     for pid, name in prop_name.items():
-        info = prop_thumb.get(pid) or {}
+        info = reference_info("prop", pid, prop_thumb.get(pid) or {})
         items.append(
             ShotLinkedAssetItem(
                 type="prop",
                 id=pid,
                 image_id=info.get("image_id"),
                 file_id=info.get("file_id"),
-                name=name,
+                name=str(info.get("display_name") or name),
                 thumbnail=str(info.get("thumbnail") or ""),
+                reference_id=info.get("reference_id"),
+                reference_version=info.get("reference_version"),
             )
         )
     for sid, name in scene_name.items():
-        info = scene_thumb.get(sid) or {}
+        info = reference_info("scene", sid, scene_thumb.get(sid) or {})
         items.append(
             ShotLinkedAssetItem(
                 type="scene",
                 id=sid,
                 image_id=info.get("image_id"),
                 file_id=info.get("file_id"),
-                name=name,
+                name=str(info.get("display_name") or name),
                 thumbnail=str(info.get("thumbnail") or ""),
+                reference_id=info.get("reference_id"),
+                reference_version=info.get("reference_version"),
             )
         )
     for coid, name in costume_name.items():
-        info = costume_thumb.get(coid) or {}
+        info = reference_info("costume", coid, costume_thumb.get(coid) or {})
         items.append(
             ShotLinkedAssetItem(
                 type="costume",
                 id=coid,
                 image_id=info.get("image_id"),
                 file_id=info.get("file_id"),
-                name=name,
+                name=str(info.get("display_name") or name),
                 thumbnail=str(info.get("thumbnail") or ""),
+                reference_id=info.get("reference_id"),
+                reference_version=info.get("reference_version"),
             )
         )
 

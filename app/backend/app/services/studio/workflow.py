@@ -11,7 +11,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.studio import (
-    Actor, ActorImage, Chapter, Character, CharacterImage, CharacterPropLink,
+    Actor, ActorImage, AssetReferenceVersion, Chapter, Character, CharacterImage, CharacterPropLink,
     Costume, CostumeImage,
     Project, ProjectActorLink, ProjectBrainEntry, ProjectCostumeLink,
     ProjectPropLink, ProjectSceneLink, ProjectWorkflowInvalidation,
@@ -116,6 +116,7 @@ async def _snapshot(db: AsyncSession, *, project_id: str) -> dict[str, Any]:
         "prop_images": [_row_payload(row) for row in await _rows(db, PropImage, PropImage.prop_id.in_(prop_ids))] if prop_ids else [],
         "costume_images": [_row_payload(row) for row in await _rows(db, CostumeImage, CostumeImage.costume_id.in_(costume_ids))] if costume_ids else [],
         "actor_images": [_row_payload(row) for row in await _rows(db, ActorImage, ActorImage.actor_id.in_(actor_ids))] if actor_ids else [],
+        "asset_references": [_row_payload(row) for row in await _rows(db, AssetReferenceVersion, AssetReferenceVersion.project_id == project_id)],
     }
 
 
@@ -165,6 +166,7 @@ async def restore_revision(
     current_actor_ids = select(Actor.id).where(Actor.project_id == project_id)
 
     delete_steps = [
+        (AssetReferenceVersion, AssetReferenceVersion.project_id == project_id),
         (ShotExtractedDialogueCandidate, ShotExtractedDialogueCandidate.shot_id.in_(current_shot_ids)),
         (ShotExtractedCandidate, ShotExtractedCandidate.shot_id.in_(current_shot_ids)),
         (ShotDialogLine, ShotDialogLine.shot_detail_id.in_(current_shot_ids)),
@@ -189,7 +191,7 @@ async def restore_revision(
         (Chapter, Chapter.project_id == project_id),
     ]
     if "actors" in snapshot:
-        delete_steps[16:16] = [
+        delete_steps[17:17] = [
             (ActorImage, ActorImage.actor_id.in_(current_actor_ids)),
             (Actor, Actor.project_id == project_id),
         ]
@@ -215,6 +217,7 @@ async def restore_revision(
         ("character_images", CharacterImage), ("scene_images", SceneImage),
         ("prop_images", PropImage), ("costume_images", CostumeImage),
         ("actor_images", ActorImage), ("frame_images", ShotFrameImage),
+        ("asset_references", AssetReferenceVersion),
     ):
         if key == "actor_images" and "actors" not in snapshot:
             continue

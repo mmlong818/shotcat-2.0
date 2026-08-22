@@ -13,6 +13,7 @@ from app.models.studio import (
     ActorImage,
     AssetQualityLevel,
     AssetViewAngle,
+    Character,
     CharacterImage,
     CostumeImage,
     PropImage,
@@ -32,6 +33,8 @@ from app.services.studio.file_usages import (
     upsert_file_usage,
 )
 from app.services.studio.entity_image_names import default_name_for_relation_image
+from app.schemas.studio.asset_references import AssetReferenceCreate
+from app.services.studio.asset_references import register_asset_reference
 from app.services.studio.shot_status import mark_shot_generating, recompute_shot_status
 from app.services.studio.image_tasks import load_provider_config, resolve_image_model
 from app.services.worker.async_task_support import cancel_if_requested_async
@@ -228,6 +231,47 @@ async def _persist_images_to_assets(
                     usage_kind=FileUsageKind.shot_frame,
                     source_ref=f"shot_frame_image:{image_row.id}",
                 )
+
+    reference_target: tuple[str, str, int | None, str | None] | None = None
+    if relation_type == "actor_image":
+        image_row = await session.get(ActorImage, int(relation_entity_id))
+        if image_row is not None:
+            reference_target = ("actor", image_row.actor_id, image_row.id, await first_project_id_for_actor(session, image_row.actor_id))
+    elif relation_type == "scene_image":
+        image_row = await session.get(SceneImage, int(relation_entity_id))
+        if image_row is not None:
+            reference_target = ("scene", image_row.scene_id, image_row.id, await first_project_id_for_scene(session, image_row.scene_id))
+    elif relation_type == "prop_image":
+        image_row = await session.get(PropImage, int(relation_entity_id))
+        if image_row is not None:
+            reference_target = ("prop", image_row.prop_id, image_row.id, await first_project_id_for_prop(session, image_row.prop_id))
+    elif relation_type == "costume_image":
+        image_row = await session.get(CostumeImage, int(relation_entity_id))
+        if image_row is not None:
+            reference_target = ("costume", image_row.costume_id, image_row.id, await first_project_id_for_costume(session, image_row.costume_id))
+    elif relation_type == "character_image":
+        image_row = await session.get(CharacterImage, int(relation_entity_id))
+        character = await session.get(Character, image_row.character_id) if image_row is not None else None
+        if image_row is not None and character is not None:
+            reference_target = ("character", image_row.character_id, image_row.id, character.project_id)
+    elif relation_type == "character":
+        character = await session.get(Character, relation_entity_id)
+        if character is not None:
+            reference_target = ("character", character.id, getattr(ci, "id", None), character.project_id)
+
+    if reference_target is not None and reference_target[3]:
+        entity_type, entity_id, image_id, project_id = reference_target
+        await register_asset_reference(
+            session,
+            project_id=str(project_id),
+            body=AssetReferenceCreate(
+                entity_type=entity_type,
+                entity_id=entity_id,
+                image_id=image_id,
+                file_id=file_id,
+                source="generated",
+            ),
+        )
 
 
 async def _resolve_related_shot_id(

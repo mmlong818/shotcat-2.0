@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.utils import apply_keyword_filter, apply_order, paginate
 from app.models.studio import (
     Actor,
+    AssetReferenceVersion,
     Chapter,
     Costume,
     Project,
@@ -560,6 +561,11 @@ async def delete_entity(
     await db.execute(
         delete(spec.image_model).where(getattr(spec.image_model, spec.id_field) == entity_id)
     )
+    await db.execute(delete(AssetReferenceVersion).where(
+        AssetReferenceVersion.project_id == obj.project_id,
+        AssetReferenceVersion.entity_type == entity_type_norm,
+        AssetReferenceVersion.entity_id == entity_id,
+    ))
     await db.delete(obj)
     await db.flush()
     return {

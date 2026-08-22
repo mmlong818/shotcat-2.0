@@ -387,7 +387,14 @@ async def _create_shot_frame_image_task_internal(
             format="png",
             shot_version=shot.version if shot is not None else 1,
             prompt_version=getattr(shot_detail, "prompt_version", 1),
-            asset_versions={f"{item.type}:{item.id}": item.file_id or "" for item in images},
+            asset_versions={
+                f"{item.type}:{item.id}": {
+                    "file_id": item.file_id or "",
+                    "reference_id": item.reference_id,
+                    "version": item.reference_version,
+                }
+                for item in images
+            },
             is_stale=False,
         )
         db.add(shot_frame_image)
@@ -399,7 +406,12 @@ async def _create_shot_frame_image_task_internal(
     shot_frame_image.shot_version = shot.version if shot is not None else 1
     shot_frame_image.prompt_version = getattr(shot_detail, "prompt_version", 1)
     shot_frame_image.asset_versions = {
-        f"{item.type}:{item.id}": item.file_id or "" for item in images
+        f"{item.type}:{item.id}": {
+            "file_id": item.file_id or "",
+            "reference_id": item.reference_id,
+            "version": item.reference_version,
+        }
+        for item in images
     }
     shot_frame_image.is_stale = False
 
