@@ -82,11 +82,11 @@ export default function App() {
     }
   }, [])
 
-  const openProject = (p: Project) => {
+  const openProject = (p: Project, entry = '/overview') => {
     setProject(p)
     setSIdx(null)
     localStorage.setItem('duanju.pid', p.id)
-    navigate('/overview')
+    navigate(entry)
   }
 
   // 真实进度：已出关键帧的镜头 ÷ 总镜头（后端 status 的"就绪"另有语义、从不翻转，不可用）
@@ -171,8 +171,9 @@ export default function App() {
             <span>搜索镜头、角色、资产…</span><kbd>Ctrl K</kbd>
           </div>
         )}
-        <div className="tb-icon" title={theme === 'dark' ? '切换浅色模式' : '切换黑金模式'} style={{ cursor: 'pointer' }}
-          onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}>{theme === 'dark' ? '☀' : '☾'}</div>
+        <button type="button" className="tb-icon" title={theme === 'dark' ? '切换浅色模式' : '切换黑金模式'}
+          aria-label={theme === 'dark' ? '切换浅色模式' : '切换黑金模式'}
+          onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}>{theme === 'dark' ? '☀' : '☾'}</button>
         {!onLobby && <div className="tb-icon" title="切换项目" onClick={() => navigate('/projects')} style={{ cursor: 'pointer' }}>⇄</div>}
         <div className="avatar">猫</div>
       </div>

@@ -10,7 +10,7 @@ const EMPTY_FORM = {
   format: '竖屏漫剧', runtime_minutes: 3, audience: '', tone: '', premise: '',
 }
 
-export default function Lobby({ onOpen }: { onOpen: (p: Project) => void }) {
+export default function Lobby({ onOpen }: { onOpen: (p: Project, entry?: string) => void }) {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -67,7 +67,7 @@ export default function Lobby({ onOpen }: { onOpen: (p: Project) => void }) {
       setForm(EMPTY_FORM)
       // 后端 commit-after-yield：创建后立刻拉列表可能还查不到新项目（时序缝隙），
       // 直接用表单数据构造项目对象进入，不依赖回读
-      onOpen(created)
+      onOpen(created, '/script')
     } catch (e: any) {
       setErr(e?.message || '创建失败')
     } finally {
