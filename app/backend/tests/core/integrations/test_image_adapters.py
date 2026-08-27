@@ -60,7 +60,8 @@ async def test_openai_image_adapter_edits_when_references(monkeypatch: pytest.Mo
     captured: dict[str, str] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
-        captured["body"] = request.content.decode()
+        captured["content_type"] = request.headers.get("content-type", "")
+        captured["body"] = request.content.decode("latin-1")
         assert request.url.path.endswith("/images/edits")
         return httpx.Response(200, json={"data": [{"b64_json": "abc"}]})
 
@@ -68,14 +69,42 @@ async def test_openai_image_adapter_edits_when_references(monkeypatch: pytest.Mo
     cfg = ProviderConfig(provider="openai", api_key="sk-test")
     inp = ImageGenerationInput(
         prompt="edit me",
+        model="gpt-image-2",
         n=1,
-        watermark=True,
-        images=[InputImageRef(image_url="https://example.com/ref.png")],
+        images=[
+            InputImageRef(image_url="data:image/png;base64,iVBORw0KGgo="),
+            InputImageRef(image_url="data:image/jpeg;base64,/9j/2Q=="),
+        ],
     )
     result = await OpenAIImageApiAdapter().generate(cfg=cfg, inp=inp, timeout_s=30.0)
-    body = json.loads(captured["body"])
-    assert body["watermark"] is True
+    assert captured["content_type"].startswith("multipart/form-data; boundary=")
+    assert captured["body"].count('name="image[]"') == 2
+    assert 'filename="reference-1.png"' in captured["body"]
+    assert 'filename="reference-2.jpg"' in captured["body"]
+    assert 'name="model"' in captured["body"]
+    assert "gpt-image-2" in captured["body"]
+    assert 'name="prompt"' in captured["body"]
+    assert "edit me" in captured["body"]
     assert result.images[0].b64_json == "abc"
+
+
+@pytest.mark.asyncio
+async def test_openai_image_adapter_rejects_file_id_for_image_api_edits(monkeypatch: pytest.MonkeyPatch) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"request should not be sent, got path={request.url.path}")
+
+    _patch_httpx_client(monkeypatch, httpx.MockTransport(handler))
+    cfg = ProviderConfig(provider="openai", api_key="sk-test")
+    inp = ImageGenerationInput(
+        prompt="edit me",
+        model="gpt-image-2",
+        images=[InputImageRef(file_id="file-reference")],
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        await OpenAIImageApiAdapter().generate(cfg=cfg, inp=inp, timeout_s=30.0)
+
+    assert "requires image bytes" in str(exc_info.value)
 
 
 @pytest.mark.asyncio

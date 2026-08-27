@@ -9,6 +9,7 @@ import Overview from './pages/Overview'
 import Script from './pages/Script'
 import Gallery from './pages/Gallery'
 import Brain from './pages/Brain'
+import Videos from './pages/Videos'
 import ModelSetupGate from './ModelSetupGate'
 import TaskActivity from './TaskActivity'
 
@@ -18,9 +19,10 @@ const STAGES = [
   { key: 'cast', label: '设定', to: '/cast' },
   { key: 'board', label: '分镜', to: '/board' },
   { key: 'frames', label: '画面', to: '/frames' },
+  { key: 'video', label: '视频', to: '/video' },
   { key: 'gallery', label: '总览', to: '/gallery' },
 ]
-const STAGE_PATHS = ['/script', '/brain', '/cast', '/board', '/frames', '/gallery', '/settings']
+const STAGE_PATHS = ['/script', '/brain', '/cast', '/board', '/frames', '/video', '/gallery', '/settings']
 const LAST_STAGE_KEY = 'duanju.last-stage.'
 
 function Icon({ name }: { name: string }) {
@@ -32,6 +34,7 @@ function Icon({ name }: { name: string }) {
     cast: <g><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></g>,
     board: <g><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M9 4v16" /></g>,
     frames: <g><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h4v10M17 5v14h4M7 5v4" /></g>,
+    video: <g><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m10 9 5 3-5 3z" /></g>,
     gallery: <g><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="1.6" /><path d="M3 16l5-4 4 3 4-5 5 6" /></g>,
     settings: <g><circle cx="12" cy="12" r="3" /><path d="M12 3v3M12 18v3M3 12h3M18 12h3" /></g>,
   }
@@ -224,6 +227,7 @@ export default function App() {
           <Route path="/brain" element={<Brain project={project} />} />
           <Route path="/cast" element={<Cast project={project} />} />
           <Route path="/frames" element={<Frames project={project} />} />
+          <Route path="/video" element={<Videos project={project} />} />
           <Route path="/gallery" element={<Gallery project={project} />} />
           <Route path="/settings" element={<Placeholder title="设置" />} />
         </Routes>

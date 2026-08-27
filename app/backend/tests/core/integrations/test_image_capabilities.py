@@ -94,3 +94,35 @@ def test_resolve_image_size_uses_volcengine_builtin_2k_3k_profiles() -> None:
     )
     assert size_2k == "1600x2848"
     assert size_3k == "4704x2016"
+
+
+def test_gpt_image_2_uses_valid_video_reference_sizes() -> None:
+    standard = resolve_image_size(
+        provider="openai",
+        model="gpt-image-2",
+        purpose="video_reference",
+        target_ratio="16:9",
+        resolution_profile="standard",
+        requested_size=None,
+    )
+    high = resolve_image_size(
+        provider="openai",
+        model="gpt-image-2-2026-04-21",
+        purpose="video_reference",
+        target_ratio="9:16",
+        resolution_profile="high",
+        requested_size=None,
+    )
+
+    assert standard == "1536x864"
+    assert high == "1152x2048"
+
+
+@pytest.mark.parametrize("field,value", [("seed", 7), ("watermark", True)])
+def test_gpt_image_2_rejects_unsupported_options(field: str, value: object) -> None:
+    inp = ImageGenerationInput(prompt="test", model="gpt-image-2", **{field: value})
+
+    with pytest.raises(ValueError) as exc_info:
+        validate_image_options(provider="openai", model=inp.model, input_=inp)
+
+    assert f"{field} is not supported" in str(exc_info.value)

@@ -24,6 +24,7 @@ async def build_video_submission_payload(
                 "template_name": derived.template_name,
                 "rendered_prompt": derived.rendered_prompt,
                 "pack": derived.pack.model_dump(),
+                "execution_plan": derived.execution_plan.model_dump(),
                 "warnings": derived.warnings,
             }
         },

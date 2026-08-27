@@ -349,6 +349,32 @@ class ShotFramePromptMappingRead(BaseModel):
     file_id: str = Field(..., description="本次渲染与生成使用的文件 ID")
 
 
+FrameReferenceRole = Literal["identity", "costume", "environment", "prop", "reference"]
+
+
+class FrameReferenceRoleRead(BaseModel):
+    """单张参考图在当前画面生成中的明确职责。"""
+
+    token: str = Field(..., description="参考图顺序 token，如 图1")
+    type: ShotLinkedAssetType = Field(..., description="参考实体类型")
+    name: str = Field(..., description="参考实体名称")
+    file_id: str = Field(..., description="参考图文件 ID")
+    role: FrameReferenceRole = Field(..., description="职责：身份/服装/环境/道具/通用参考")
+    label: str = Field(..., description="面向用户展示的职责名称")
+    instruction: str = Field(..., description="该参考图约束生成结果的方式")
+
+
+class FramePromptPlanRead(BaseModel):
+    """画面生成前可预览的结构化计划。"""
+
+    frame_goal: str = Field("", description="当前帧需要完成的叙事职责")
+    visual_prompt: str = Field(..., description="画面主体、动作与可见环境描述")
+    director_constraints: list[str] = Field(default_factory=list, description="导演级硬约束")
+    continuity: list[str] = Field(default_factory=list, description="镜头承接、朝向与视线约束")
+    composition: list[str] = Field(default_factory=list, description="构图与空间锚点")
+    reference_roles: list[FrameReferenceRoleRead] = Field(default_factory=list, description="各参考图的职责")
+
+
 class FrameGuidanceDecisionRead(BaseModel):
     """分镜帧 guidance 的保留/压缩决策结果。"""
 
@@ -363,6 +389,7 @@ class RenderedShotFramePromptRead(BaseModel):
 
     base_prompt: str = Field(..., description="原始基础提示词（不含图片映射说明）")
     rendered_prompt: str = Field(..., description="最终提交给模型的提示词（含图片映射说明）")
+    prompt_plan: FramePromptPlanRead = Field(..., description="本次画面生成的结构化执行计划")
     selected_guidance: list[str] = Field(default_factory=list, description="最终 prompt 实际保留的 guidance 列表")
     dropped_guidance: list[str] = Field(default_factory=list, description="本次渲染中被压缩掉的 guidance 列表")
     selected_guidance_details: list[FrameGuidanceDecisionRead] = Field(default_factory=list, description="最终保留 guidance 的决策详情")
@@ -495,6 +522,7 @@ class ShotVideoPromptPackRead(BaseModel):
     shot_id: str = Field(..., description="镜头 ID")
     title: str = Field("", description="镜头标题")
     script_excerpt: str = Field("", description="剧本摘录")
+    shot_description: str = Field("", description="镜头整体画面描述")
     action_beats: list[str] = Field(default_factory=list, description="动作/场景要点")
     action_beat_phases: list[ActionBeatPhaseRead] = Field(default_factory=list, description="动作拍点的阶段推断结果")
     previous_shot_summary: str = Field("", description="上一镜头摘要，用于提示词连续性约束")
@@ -503,6 +531,9 @@ class ShotVideoPromptPackRead(BaseModel):
     composition_anchor: str = Field("", description="当前镜头的构图与空间锚点建议")
     screen_direction_guidance: str = Field("", description="当前镜头的人物朝向、视线与左右轴线建议")
     dialogue_summary: str = Field("", description="对白摘要")
+    narrative_function: str = Field("", description="镜头叙事目的")
+    sound_effects: str = Field("", description="镜头声音设计")
+    has_bgm: bool = Field(False, description="是否明确要求背景音乐")
     characters: list[ShotPromptAssetRef] = Field(default_factory=list, description="角色引用")
     scene: ShotPromptAssetRef | None = Field(None, description="场景引用")
     props: list[ShotPromptAssetRef] = Field(default_factory=list, description="道具引用")
@@ -514,6 +545,43 @@ class ShotVideoPromptPackRead(BaseModel):
     negative_prompt: str = Field("", description="默认负面提示词")
 
 
+class VideoReferenceBindingRead(BaseModel):
+    """视频生成中单张参考图的明确职责。"""
+
+    file_id: str = Field(..., description="参考图文件 ID")
+    frame_type: str = Field(..., description="帧类型：first/last/key")
+    role: str = Field(..., description="参考图职责代码：start/end/key_state")
+    title: str = Field(..., description="职责名称")
+    instruction: str = Field(..., description="模型应如何使用该参考图")
+
+
+class VideoTimelineSegmentRead(BaseModel):
+    """覆盖完整视频时长的单个执行片段。"""
+
+    start_s: float = Field(..., description="片段起始秒")
+    end_s: float = Field(..., description="片段结束秒")
+    purpose: str = Field(..., description="该片段的叙事作用")
+    action: str = Field(..., description="主体动作与状态变化")
+    camera: str = Field(..., description="构图与运镜")
+    audio: str = Field(..., description="该时间段的对白或声音")
+
+
+class VideoExecutionPlanRead(BaseModel):
+    """视频模型执行前可审阅的时间轴与连续性计划。"""
+
+    shot_id: str = Field(..., description="镜头 ID")
+    target_duration_s: int = Field(..., description="目标时长（秒）")
+    reference_mode: str = Field(..., description="参考图模式")
+    generation_path: str = Field(..., description="生成路径代码")
+    generation_path_label: str = Field(..., description="生成路径名称")
+    start_state: str = Field(..., description="0 秒画面与动作状态")
+    end_state: str = Field(..., description="结束时画面与动作状态")
+    audio_approach: str = Field(..., description="全片声音策略")
+    references: list[VideoReferenceBindingRead] = Field(default_factory=list, description="参考图及其职责")
+    timeline: list[VideoTimelineSegmentRead] = Field(default_factory=list, description="完整时间轴")
+    warnings: list[str] = Field(default_factory=list, description="生成前需注意的非阻塞提示")
+
+
 class ShotVideoPromptPreviewRead(BaseModel):
     """视频提示词预览结果。"""
 
@@ -522,6 +590,7 @@ class ShotVideoPromptPreviewRead(BaseModel):
     template_name: str | None = Field(None, description="使用的提示词模板名称")
     rendered_prompt: str = Field(..., description="渲染后的提示词")
     pack: ShotVideoPromptPackRead = Field(..., description="渲染上下文包")
+    execution_plan: VideoExecutionPlanRead = Field(..., description="视频执行计划")
     warnings: list[str] = Field(default_factory=list, description="渲染时发现的非阻塞提示")
 
 

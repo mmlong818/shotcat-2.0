@@ -334,6 +334,21 @@ def test_preview_shot_video_prompt_returns_success_envelope(client: TestClient, 
         template_name = "视频模板"
         rendered_prompt = "视频提示词"
         warnings = []
+        execution_plan = {
+            "shot_id": "shot-1",
+            "target_duration_s": 3,
+            "reference_mode": "text_only",
+            "generation_path": "text_to_video",
+            "generation_path_label": "文字生成视频",
+            "start_state": "承接上一镜头：角色进入",
+            "end_state": "形成可剪辑的稳定落点：角色停下",
+            "audio_approach": "环境声与动作音效同期发生",
+            "references": [],
+            "timeline": [
+                {"start_s": 0, "end_s": 3, "purpose": "动作推进", "action": "角色进入", "camera": "中景", "audio": "环境声"}
+            ],
+            "warnings": [],
+        }
         pack = {
             "shot_id": "shot-1",
             "title": "镜头一",

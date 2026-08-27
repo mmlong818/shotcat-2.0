@@ -71,6 +71,7 @@ export interface Shot {
   camera_shot?: string; duration?: number; angle?: string; movement?: string; action_beats?: string[]; description?: string
   scene_id?: string | null; mood_tags?: string[]
   version?: number; source_chapter_version?: number; is_stale?: boolean; stale_reason?: string
+  generated_video_file_id?: string | null
 }
 
 // 镜头语言代码 → 中文（与后端 code、bridge/shot_breakdown 词表一致）
@@ -99,6 +100,30 @@ export interface EntityDeleteResult {
   reassigned_shot_count: number
 }
 export interface FrameImage { id: number; shot_detail_id: string; frame_type: 'first' | 'key' | 'last'; file_id: string | null }
+export interface FrameReferenceRole {
+  token: string
+  type: string
+  name: string
+  file_id: string
+  role: 'identity' | 'costume' | 'environment' | 'prop' | 'reference'
+  label: string
+  instruction: string
+}
+export interface FramePromptPlan {
+  frame_goal: string
+  visual_prompt: string
+  director_constraints: string[]
+  continuity: string[]
+  composition: string[]
+  reference_roles: FrameReferenceRole[]
+}
+export interface FramePromptPreview {
+  rendered_prompt: string
+  base_prompt: string
+  images: string[]
+  mappings: any[]
+  prompt_plan: FramePromptPlan
+}
 export interface TaskStatus { task_id: string; status: string; progress: number }
 export interface TaskListItem extends TaskStatus {
   task_kind: string
@@ -112,6 +137,60 @@ export interface TaskListItem extends TaskStatus {
   navigate_relation_entity_id?: string | null
 }
 export type FrameTaskIndex = Record<string, Partial<Record<FrameType, TaskListItem>>>
+export type VideoReferenceMode = 'first' | 'last' | 'key' | 'first_last' | 'first_last_key' | 'text_only'
+export type VideoTaskIndex = Record<string, TaskListItem>
+export interface ShotVideoReadiness {
+  shot_id: string
+  reference_mode: VideoReferenceMode
+  ready: boolean
+  checks: { key: string; ok: boolean; message: string }[]
+}
+export interface VideoPromptPreview {
+  prompt: string
+  images: string[]
+  pack?: Record<string, unknown> | null
+  execution_plan?: VideoExecutionPlan | null
+}
+export interface VideoReferenceBinding {
+  file_id: string
+  frame_type: FrameType
+  role: 'start' | 'end' | 'key_state'
+  title: string
+  instruction: string
+}
+export interface VideoTimelineSegment {
+  start_s: number
+  end_s: number
+  purpose: string
+  action: string
+  camera: string
+  audio: string
+}
+export interface VideoExecutionPlan {
+  shot_id: string
+  target_duration_s: number
+  reference_mode: VideoReferenceMode
+  generation_path: string
+  generation_path_label: string
+  start_state: string
+  end_state: string
+  audio_approach: string
+  references: VideoReferenceBinding[]
+  timeline: VideoTimelineSegment[]
+  warnings: string[]
+}
+export interface VideoGenerationOptions {
+  provider: string
+  model_id: string
+  model_name: string
+  allowed_ratios: string[]
+  default_ratio: string
+  supported_reference_modes: VideoReferenceMode[]
+  allowed_resolutions: string[]
+  default_resolution?: string | null
+  min_seconds?: number | null
+  max_seconds?: number | null
+}
 export interface AssetImageBatchStatus {
   batch_id: string
   status: string
@@ -204,7 +283,7 @@ export function findPipelineJob(projectId: string | undefined, step: PipelineSte
 }
 
 export interface ModelSetupCapability {
-  category: 'text' | 'image'
+  category: 'text' | 'image' | 'video'
   ready: boolean
   reason?: string | null
   message: string
@@ -255,10 +334,14 @@ const isGenericCrowdCharacter = (name: string | undefined) => {
 
 export const api = {
   initialModelSetup: () => get<InitialModelSetupStatus>('/llm/initial-setup'),
-  supportedModelProviders: (category: 'text' | 'image') =>
+  supportedModelProviders: (category: 'text' | 'image' | 'video') =>
     get<SupportedModelProvider[]>(`/llm/providers/supported?category=${category}`),
   saveInitialModelSetup: (body: { text?: InitialModelConnection; image?: InitialModelConnection }) =>
     put<InitialModelSetupStatus>('/llm/initial-setup', body),
+  videoModelSetup: () => get<ModelSetupCapability>('/llm/video-setup'),
+  saveVideoModelSetup: (body: InitialModelConnection) =>
+    put<ModelSetupCapability>('/llm/video-setup', body),
+  videoGenerationOptions: () => get<VideoGenerationOptions>('/llm/video-generation-options'),
   projects: () => get<Paged<Project>>('/studio/projects?page_size=100').then((d) => d.items),
   projectBrain: (projectId: string) =>
     get<ProjectBrainEntry[]>(`/studio/projects/${encodeURIComponent(projectId)}/brain`),
@@ -474,10 +557,38 @@ export const api = {
     }
     return result
   },
+  videoReadiness: (shotId: string, referenceMode: VideoReferenceMode) =>
+    get<ShotVideoReadiness>(
+      `/studio/shots/${encodeURIComponent(shotId)}/video-readiness?reference_mode=${encodeURIComponent(referenceMode)}`,
+    ),
+  previewVideoPrompt: (body: { shot_id: string; reference_mode: VideoReferenceMode; prompt?: string | null; images?: string[]; ratio: string; resolution?: string | null }) =>
+    post<VideoPromptPreview>('/film/tasks/video/preview-prompt', body),
+  createVideoTask: (body: { shot_id: string; reference_mode: VideoReferenceMode; prompt?: string | null; images?: string[]; ratio: string; resolution?: string | null }) =>
+    post<{ task_id: string }>('/film/tasks/video', body).then((item) => item.task_id),
+  async videoTaskIndex(): Promise<VideoTaskIndex> {
+    const tasks: TaskListItem[] = []
+    for (let page = 1; ; page++) {
+      const data = await get<Paged<TaskListItem>>(
+        `/film/tasks?task_kind=video_generation&relation_type=video&recent_seconds=86400&page=${page}&page_size=100`,
+      )
+      tasks.push(...data.items)
+      if (page >= (data.pagination?.max_page ?? 1)) break
+    }
+    const result: VideoTaskIndex = {}
+    for (const task of tasks) {
+      const shotId = task.relation_entity_id
+      if (!shotId) continue
+      const current = result[shotId]
+      const taskTime = task.updated_at_ts ?? task.created_at_ts ?? 0
+      const currentTime = current?.updated_at_ts ?? current?.created_at_ts ?? 0
+      if (!current || taskTime >= currentTime) result[shotId] = task
+    }
+    return result
+  },
   createFramePromptTask: (shotId: string, frameType: FrameType) =>
     post<{ task_id: string }>('/film/tasks/shot-frame-prompts', { shot_id: shotId, frame_type: frameType }).then((d) => d.task_id),
   renderFramePrompt: (shotId: string, frameType: FrameType, prompt: string, refs?: any[]) =>
-    post<{ rendered_prompt: string; base_prompt: string; images: string[]; mappings: any[] }>(
+    post<FramePromptPreview>(
       `/studio/image-tasks/shot/${shotId}/frame-render-prompt`,
       {
         frame_type: frameType,

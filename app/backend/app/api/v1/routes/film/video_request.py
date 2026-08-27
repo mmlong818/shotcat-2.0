@@ -21,4 +21,5 @@ class VideoGenerationTaskRequest(BaseModel):
     )
 
     ratio: VideoRatio = Field(..., description="视频画幅比例，如 16:9 / 9:16")
+    resolution: str | None = Field(None, description="清晰度档位，如 768P / 2K")
     # seconds 由 ShotDetail.duration 自动确定；请求体不再接收覆盖值。

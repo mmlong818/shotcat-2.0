@@ -15,13 +15,13 @@ ImagePurpose = Literal["generic", "video_reference", "asset_image"]
 
 
 class InputImageRef(BaseModel):
-    """参考图片引用：统一映射到 OpenAI images[*] 与火山 image[]。"""
+    """参考图片引用：由各供应商适配层转换为真实图片输入。"""
 
     model_config = ConfigDict(extra="forbid")
 
     file_id: Optional[str] = Field(
         None,
-        description="文件 ID（用于 OpenAI File API；火山可忽略）",
+        description="内部文件 ID；调用 OpenAI Image API 前必须先解析为图片 URL 或 data URL",
     )
     image_url: Optional[str] = Field(
         None,
@@ -43,7 +43,7 @@ class ImageGenerationInput(BaseModel):
     prompt: str = Field(..., description="文本提示词")
     images: list[InputImageRef] = Field(
         default_factory=list,
-        description="参考图片列表：存在时 OpenAI 走 /images/edits，火山映射为 image[]",
+        description="参考图片列表：存在时 OpenAI 走 multipart /images/edits，火山映射为 image[]",
     )
     model: Optional[str] = Field(None, description="模型名称（如 gpt-image-1.5 / doubao-seedream-*）")
     target_ratio: ImageTargetRatio | None = Field(

@@ -53,7 +53,7 @@ def test_preview_video_generation_prompt_returns_success_envelope(client: TestCl
     db = _FakeDB()
 
     async def _fake_preview(*_args, **_kwargs):
-        return "视频预览提示词", ["file-1", "file-2"], {
+        pack = {
             "shot_id": "shot-1",
             "title": "镜头一",
             "script_excerpt": "主角转身看向门口。",
@@ -78,6 +78,25 @@ def test_preview_video_generation_prompt_returns_success_envelope(client: TestCl
             "style": "真人都市",
             "negative_prompt": "",
         }
+        execution_plan = {
+            "shot_id": "shot-1",
+            "target_duration_s": 4,
+            "reference_mode": "first_last",
+            "generation_path": "first_last_i2v",
+            "generation_path_label": "首尾帧图生视频",
+            "start_state": "严格承接首帧：主角转身",
+            "end_state": "自然抵达尾帧：视线停在门口",
+            "audio_approach": "以环境声和动作音效为主；不默认添加背景音乐",
+            "references": [
+                {"file_id": "file-1", "frame_type": "first", "role": "start", "title": "0 秒起始状态", "instruction": "锁定开场。"},
+                {"file_id": "file-2", "frame_type": "last", "role": "end", "title": "结束目标状态", "instruction": "锁定结尾。"},
+            ],
+            "timeline": [
+                {"start_s": 0, "end_s": 4, "purpose": "动作推进", "action": "主角转身看向门口", "camera": "中景 / 平视 / 固定", "audio": "环境声与动作音效同期发生"}
+            ],
+            "warnings": [],
+        }
+        return "视频预览提示词", ["file-1", "file-2"], pack, execution_plan
 
     monkeypatch.setattr(route, "preview_prompt_and_images", _fake_preview)
     app.dependency_overrides[get_db] = _override_db(db)
@@ -103,6 +122,8 @@ def test_preview_video_generation_prompt_returns_success_envelope(client: TestCl
     assert body["data"]["images"] == ["file-1", "file-2"]
     assert body["data"]["pack"]["previous_shot_summary"].startswith("标题：镜头零")
     assert body["data"]["pack"]["next_shot_goal"].startswith("标题：镜头二")
+    assert body["data"]["execution_plan"]["generation_path"] == "first_last_i2v"
+    assert body["data"]["execution_plan"]["timeline"][-1]["end_s"] == 4
 
 
 def test_preview_video_generation_prompt_not_found_returns_api_response(

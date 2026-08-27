@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from app.schemas.studio.shots import ShotVideoPromptPackRead, ShotVideoPromptPreviewRead
+from app.schemas.studio.shots import ShotVideoPromptPackRead, ShotVideoPromptPreviewRead, VideoExecutionPlanRead
 from app.services.studio.generation.shared.types import GenerationDerivedPreview
 from app.services.studio.generation.video.build_base import VideoBaseDraft
 from app.services.studio.generation.video.build_context import VideoGenerationContext
+from app.services.studio.generation.video.execution_plan import (
+    build_video_execution_plan,
+    enrich_prompt_with_execution_plan,
+)
 from app.services.studio.shot_video_prompt_pack import (
     _fallback_video_prompt,
     _pack_variables,
@@ -23,6 +27,7 @@ class VideoDerivedPreview(GenerationDerivedPreview):
     rendered_prompt: str
     images: list[str]
     pack: ShotVideoPromptPackRead
+    execution_plan: VideoExecutionPlanRead
     template_id: str | None = None
     template_name: str | None = None
 
@@ -34,10 +39,19 @@ async def derive_video_preview(
     context: VideoGenerationContext,
 ) -> VideoDerivedPreview:
     pack = await build_shot_video_prompt_pack(db, shot_id=base.shot_id)
+    execution_plan = build_video_execution_plan(
+        pack=pack,
+        reference_mode=context.reference_mode,
+        images=context.images,
+    )
     if base.prompt:
         rendered_prompt = enrich_rendered_video_prompt(
             rendered_prompt=base.prompt,
             pack=pack,
+        )
+        rendered_prompt = enrich_prompt_with_execution_plan(
+            rendered_prompt=rendered_prompt,
+            plan=execution_plan,
         )
         return VideoDerivedPreview(
             shot_id=base.shot_id,
@@ -45,6 +59,7 @@ async def derive_video_preview(
             rendered_prompt=rendered_prompt,
             images=context.images,
             pack=pack,
+            execution_plan=execution_plan,
             template_id=context.template_id,
             template_name=None,
             warnings=[],
@@ -66,12 +81,18 @@ async def derive_video_preview(
                 pack=pack,
             )
 
+    rendered_prompt = enrich_prompt_with_execution_plan(
+        rendered_prompt=rendered_prompt,
+        plan=execution_plan,
+    )
+
     return VideoDerivedPreview(
         shot_id=base.shot_id,
         reference_mode=context.reference_mode,
         rendered_prompt=rendered_prompt.strip(),
         images=context.images,
         pack=pack,
+        execution_plan=execution_plan,
         template_id=template.id if template else None,
         template_name=template.name if template else None,
         warnings=warnings,
@@ -88,5 +109,6 @@ def to_shot_video_prompt_preview_read(
         template_name=derived.template_name,
         rendered_prompt=derived.rendered_prompt,
         pack=derived.pack,
+        execution_plan=derived.execution_plan,
         warnings=derived.warnings,
     )

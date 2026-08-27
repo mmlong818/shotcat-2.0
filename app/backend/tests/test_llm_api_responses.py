@@ -228,6 +228,7 @@ def test_list_supported_providers_returns_capability_matrix(client: TestClient) 
     keys = {item["key"] for item in body["data"]}
     assert "openai" in keys
     assert "volcengine" in keys
+    assert "minimax" in keys
     assert "aliyun_bailian" in keys
 
 
@@ -248,6 +249,7 @@ def test_list_supported_providers_can_filter_by_category(client: TestClient) -> 
     assert isinstance(body["data"], list)
     for item in body["data"]:
         assert "video" in item["supported_categories"]
+    assert "minimax" in {item["key"] for item in body["data"]}
 
 
 def test_initial_setup_status_reports_missing_models_without_secrets(client: TestClient) -> None:
@@ -265,6 +267,59 @@ def test_initial_setup_status_reports_missing_models_without_secrets(client: Tes
     assert data["image"]["reason"] == "missing_default_model"
     assert "api_key" not in data["text"]
     assert "api_key" not in data["image"]
+
+
+def test_video_setup_status_is_optional_and_does_not_expose_secrets(client: TestClient) -> None:
+    db = _FakeLlmDB()
+    _seed_ready_text_and_image(db)
+    llm_app.dependency_overrides[get_db] = _override_db(db)
+    try:
+        response = client.get("/api/v1/llm/video-setup")
+    finally:
+        llm_app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {
+        "category": "video",
+        "ready": False,
+        "reason": "missing_default_model",
+        "message": "尚未配置默认视频模型",
+        "model_id": None,
+        "model_name": None,
+        "provider_id": None,
+        "provider_key": None,
+        "provider_name": None,
+        "has_api_key": False,
+    }
+
+
+def test_video_setup_saves_independent_provider_and_default_model(client: TestClient) -> None:
+    db = _FakeLlmDB()
+    _seed_ready_text_and_image(db)
+    llm_app.dependency_overrides[get_db] = _override_db(db)
+    try:
+        response = client.put(
+            "/api/v1/llm/video-setup",
+            json={
+                "provider_key": "openai",
+                "base_url": "https://api.openai.com/v1",
+                "api_key": "video-secret",
+                "model_name": "sora-2",
+            },
+        )
+    finally:
+        llm_app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["ready"] is True
+    assert data["category"] == "video"
+    assert data["model_name"] == "sora-2"
+    assert data["provider_key"] == "openai"
+    assert data["has_api_key"] is True
+    assert "api_key" not in data
+    assert db.model_settings[1].default_video_model_id == data["model_id"]
+    assert db.providers[data["provider_id"]].api_key == "video-secret"
 
 
 def test_initial_setup_status_accepts_separate_text_and_image_models(client: TestClient) -> None:
@@ -336,6 +391,8 @@ def test_get_video_generation_options_returns_ratio_capability(client: TestClien
     assert body["data"]["model_name"] == "sora-mini"
     assert "16:9" in body["data"]["allowed_ratios"]
     assert body["data"]["default_ratio"] == "16:9"
+    assert "supported_reference_modes" in body["data"]
+    assert "allowed_resolutions" in body["data"]
 
 
 def test_get_image_generation_options_returns_ratio_size_profiles(client: TestClient) -> None:

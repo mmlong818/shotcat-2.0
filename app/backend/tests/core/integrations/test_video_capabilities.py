@@ -56,3 +56,26 @@ def test_validate_video_options_rejects_capability_mismatch() -> None:
         assert "seed is not supported" in str(exc_info.value)
     finally:
         clear_video_model_capability_overrides(provider="volcengine")
+
+
+def test_minimax_h3_capability_exposes_real_duration_and_resolution_limits() -> None:
+    capability = resolve_video_capability(provider="minimax", model="MiniMax-H3")
+    assert capability.min_seconds == 4
+    assert capability.max_seconds == 15
+    assert capability.allowed_resolutions == {"768P", "2K"}
+    assert capability.default_resolution == "768P"
+    assert "first_last" in (capability.supported_reference_modes or set())
+    assert "first_last_key" not in (capability.supported_reference_modes or set())
+
+    valid = VideoGenerationInput(
+        prompt="test",
+        model="MiniMax-H3",
+        ratio="16:9",
+        seconds=5,
+        resolution="2K",
+    )
+    validate_video_options(provider="minimax", model=valid.model, input_=valid)
+
+    invalid = valid.model_copy(update={"seconds": 3})
+    with pytest.raises(ValueError, match="seconds must be >= 4"):
+        validate_video_options(provider="minimax", model=invalid.model, input_=invalid)

@@ -11,6 +11,11 @@ from app.services.studio.generation.video.build_context import (
 )
 from app.services.studio.generation.video.build_submission import build_video_submission_payload
 from app.services.studio.generation.video.derive_preview import VideoDerivedPreview, derive_video_preview
+from app.services.studio.generation.video.execution_plan import (
+    build_video_execution_plan,
+    enrich_prompt_with_execution_plan,
+    render_execution_plan,
+)
 
 __all__ = [
     "REQUIRED_FRAMES_BY_MODE",
@@ -21,8 +26,11 @@ __all__ = [
     "build_video_context",
     "build_video_submission_payload",
     "derive_video_preview",
+    "build_video_execution_plan",
+    "enrich_prompt_with_execution_plan",
     "required_image_count",
     "resolve_video_reference_images",
+    "render_execution_plan",
     "validate_images_count",
 ]
 

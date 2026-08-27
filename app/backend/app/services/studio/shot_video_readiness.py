@@ -19,7 +19,10 @@ from app.models.studio import (
 from app.models.task import GenerationTask, GenerationTaskStatus
 from app.models.task_links import GenerationTaskLink
 from app.schemas.studio.shots import ShotVideoReadinessCheck, ShotVideoReadinessRead
+from app.bootstrap import bootstrap_all_registries
+from app.core.integrations.video_capabilities import resolve_video_capability
 from app.services.common import entity_not_found
+from app.services.llm.provider_registry import resolve_provider_key_from_name
 from app.services.studio.generation.video import (
     build_video_base_draft,
     build_video_context,
@@ -98,39 +101,72 @@ async def _reference_frames_ready(
     return _check("reference_frames_ready", True, "参考帧已就绪")
 
 
-async def _video_model_and_provider_ready(db: AsyncSession) -> tuple[ShotVideoReadinessCheck, ShotVideoReadinessCheck]:
+async def _video_model_and_provider_ready(
+    db: AsyncSession,
+    *,
+    reference_mode: str,
+    duration: int,
+) -> tuple[ShotVideoReadinessCheck, ShotVideoReadinessCheck, ShotVideoReadinessCheck]:
     settings = await db.get(ModelSettings, 1)
     model_id = settings.default_video_model_id if settings else None
     if not model_id:
         return (
             _check("video_model_ready", False, "未配置默认视频模型"),
             _check("provider_ready", False, "未配置默认视频模型，无法检查供应商"),
+            _check("model_constraints_ready", False, "未配置默认视频模型，无法检查生成规格"),
         )
     model = await db.get(Model, model_id)
     if model is None:
         return (
             _check("video_model_ready", False, f"默认视频模型不存在：{model_id}"),
             _check("provider_ready", False, "默认视频模型不存在，无法检查供应商"),
+            _check("model_constraints_ready", False, "默认视频模型不存在，无法检查生成规格"),
         )
     if model.category != ModelCategoryKey.video:
         return (
             _check("video_model_ready", False, f"默认模型不是视频类别：{model_id}"),
             _check("provider_ready", False, "默认模型不是视频类别，无法检查供应商"),
+            _check("model_constraints_ready", False, "默认模型类别错误，无法检查生成规格"),
         )
     provider = await db.get(Provider, model.provider_id)
     if provider is None:
         return (
             _check("video_model_ready", True, "默认视频模型可用"),
             _check("provider_ready", False, f"视频模型供应商不存在：{model.provider_id}"),
+            _check("model_constraints_ready", False, "视频模型供应商不存在，无法检查生成规格"),
         )
     if not (provider.api_key or "").strip():
         return (
             _check("video_model_ready", True, "默认视频模型可用"),
             _check("provider_ready", False, f"视频模型供应商缺少 api_key：{provider.id}"),
+            _check("model_constraints_ready", False, "供应商连接未完成，无法检查生成规格"),
         )
+    bootstrap_all_registries()
+    try:
+        provider_key = resolve_provider_key_from_name(provider.name)
+        capability = resolve_video_capability(provider=provider_key, model=model.name)
+    except Exception as exc:  # noqa: BLE001
+        return (
+            _check("video_model_ready", True, "默认视频模型可用"),
+            _check("provider_ready", False, f"视频模型供应商无法解析：{exc}"),
+            _check("model_constraints_ready", False, "无法读取当前模型的生成规格"),
+        )
+
+    problems: list[str] = []
+    if capability.supported_reference_modes is not None and reference_mode not in capability.supported_reference_modes:
+        problems.append(f"不支持参考方式 {reference_mode}")
+    if duration > 0 and capability.min_seconds is not None and duration < capability.min_seconds:
+        problems.append(f"时长不能少于 {capability.min_seconds} 秒")
+    if duration > 0 and capability.max_seconds is not None and duration > capability.max_seconds:
+        problems.append(f"时长不能超过 {capability.max_seconds} 秒")
     return (
         _check("video_model_ready", True, "默认视频模型可用"),
         _check("provider_ready", True, "视频模型供应商可用"),
+        _check(
+            "model_constraints_ready",
+            not problems,
+            "当前参考方式和时长符合模型要求" if not problems else "；".join(problems),
+        ),
     )
 
 
@@ -183,7 +219,12 @@ async def get_shot_video_readiness(
         prompt_message = f"视频提示词渲染失败：{exc}"
 
     active_video_task = await _has_active_video_task(db, shot_id=shot_id)
-    model_check, provider_check = await _video_model_and_provider_ready(db)
+    duration = int(detail.duration or 0) if detail is not None else 0
+    model_check, provider_check, constraints_check = await _video_model_and_provider_ready(
+        db,
+        reference_mode=reference_mode,
+        duration=duration,
+    )
     checks = [
         _check("extraction_ready", extraction_ok, extraction_msg),
         duration_check,
@@ -191,6 +232,7 @@ async def get_shot_video_readiness(
         await _reference_frames_ready(db, shot_id=shot_id, reference_mode=reference_mode),
         model_check,
         provider_check,
+        constraints_check,
         _check(
             "no_active_video_task",
             not active_video_task,

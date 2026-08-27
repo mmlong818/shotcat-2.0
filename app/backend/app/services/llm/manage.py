@@ -12,7 +12,11 @@ from app.core.integrations.image_capabilities import (
     DEFAULT_VIDEO_REFERENCE_RATIO_SIZE_MAP,
     resolve_image_capability,
 )
-from app.core.integrations.video_capabilities import resolve_default_ratio, resolve_video_capability
+from app.core.integrations.video_capabilities import (
+    resolve_default_ratio,
+    resolve_default_resolution,
+    resolve_video_capability,
+)
 from app.schemas.common import ApiResponse, PaginatedData, paginated_response
 from app.schemas.llm import (
     ImageGenerationOptionsRead,
@@ -296,6 +300,9 @@ async def get_video_generation_options(
             model_name="",
             allowed_ratios=["16:9"],
             default_ratio="16:9",
+            supported_reference_modes=[],
+            allowed_resolutions=[],
+            default_resolution=None,
         )
 
     model = await get_or_404(db, Model, model_id, detail=entity_not_found("Model"))
@@ -304,6 +311,8 @@ async def get_video_generation_options(
     capability = resolve_video_capability(provider=provider_key, model=model.name)
     allowed_ratios = sorted(capability.allowed_ratios or {"16:9"})
     default_ratio = resolve_default_ratio(provider=provider_key, model=model.name) or allowed_ratios[0]
+    allowed_resolutions = sorted(capability.allowed_resolutions or set())
+    default_resolution = resolve_default_resolution(provider=provider_key, model=model.name)
     if default_ratio not in allowed_ratios:
         allowed_ratios = sorted({*allowed_ratios, default_ratio})
 
@@ -313,6 +322,11 @@ async def get_video_generation_options(
         model_name=model.name,
         allowed_ratios=allowed_ratios,
         default_ratio=default_ratio,
+        supported_reference_modes=sorted(capability.supported_reference_modes or set()),
+        allowed_resolutions=allowed_resolutions,
+        default_resolution=default_resolution,
+        min_seconds=capability.min_seconds,
+        max_seconds=capability.max_seconds,
     )
 
 

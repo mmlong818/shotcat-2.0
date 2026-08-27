@@ -375,6 +375,12 @@ def test_render_shot_frame_prompt_returns_success_envelope_when_prompt_given(cli
         {"token": "图1", "type": "character", "id": "char-1", "name": "陆远", "file_id": "file-1"},
         {"token": "图2", "type": "scene", "id": "scene-1", "name": "温室", "file_id": "file-2"},
     ]
+    assert body["data"]["prompt_plan"]["visual_prompt"] == "生成一个紧张的首帧画面"
+    assert [item["role"] for item in body["data"]["prompt_plan"]["reference_roles"]] == [
+        "identity",
+        "environment",
+    ]
+    assert body["data"]["prompt_plan"]["reference_roles"][1]["name"] == "温室"
     rendered_prompt = body["data"]["rendered_prompt"]
     assert rendered_prompt.startswith(body["data"]["base_prompt"])
     assert all(mapping["name"] in rendered_prompt for mapping in body["data"]["mappings"])

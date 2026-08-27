@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator
 
 from app.core.integrations.openai.video import OpenAIVideoApiAdapter
+from app.core.integrations.minimax.video import MiniMaxVideoApiAdapter
 from app.core.integrations.volcengine.video import VolcengineVideoApiAdapter
 from app.core.contracts.provider import ProviderConfig
 from app.core.tasks.registry import resolve_task_adapter
@@ -22,6 +23,7 @@ __all__ = [
     "AbstractVideoGenerationTask",
     "OpenAIVideoGenerationTask",
     "VolcengineVideoGenerationTask",
+    "MiniMaxVideoGenerationTask",
     "VideoGenerationTask",
 ]
 
@@ -206,6 +208,64 @@ class VolcengineVideoGenerationTask(AbstractVideoGenerationTask):
         )
 
 
+class MiniMaxVideoGenerationTask(AbstractVideoGenerationTask):
+    """MiniMax H3：创建任务后轮询，成功结果直接返回视频 URL。"""
+
+    def __init__(
+        self,
+        *,
+        adapter: MiniMaxVideoApiAdapter | None = None,
+        provider_config: ProviderConfig,
+        input_: VideoGenerationInput,
+        poll_interval_s: float = 10.0,
+        timeout_s: float = 120.0,
+    ) -> None:
+        super().__init__(
+            provider_config=provider_config,
+            input_=input_,
+            poll_interval_s=poll_interval_s,
+            timeout_s=timeout_s,
+        )
+        self._adapter = adapter or MiniMaxVideoApiAdapter()
+
+    async def _create_task(self) -> None:
+        self._provider_task_id = await self._adapter.create_video(
+            cfg=self._cfg,
+            input_=self._input,
+            timeout_s=self._timeout_s,
+        )
+
+    async def _poll_and_get_result(self) -> VideoGenerationResult:
+        task_id = self._provider_task_id or ""
+        if not task_id:
+            raise RuntimeError("MiniMax poll missing provider task id")
+
+        while True:
+            task = await self._adapter.get_video(
+                cfg=self._cfg,
+                task_id=task_id,
+                timeout_s=self._timeout_s,
+            )
+            status_val = str(task.get("status") or "")
+            if status_val == "succeeded":
+                content = task.get("content")
+                video_url = str(content.get("url") or "") if isinstance(content, dict) else ""
+                if not video_url:
+                    raise RuntimeError(f"MiniMax succeeded task missing content.url: {task!r}")
+                return VideoGenerationResult(
+                    url=video_url,
+                    file_id=None,
+                    provider_task_id=task_id,
+                    provider="minimax",
+                    status=status_val,
+                )
+            if status_val in ("failed", "cancelled"):
+                raise RuntimeError(
+                    f"MiniMax task not succeeded: status={status_val!r} error={task.get('error')!r}"
+                )
+            await self._sleep_poll()
+
+
 class VideoGenerationTask(BaseTask):
     """按 provider 分派到 OpenAI / 火山实现；对外构造函数签名保持不变。"""
 
@@ -255,6 +315,21 @@ class VideoGenerationTask(BaseTask):
             provider_config=provider_config,
             input_=input_,
             poll_interval_s=poll_interval_s,
+            timeout_s=timeout_s,
+        )
+
+    @staticmethod
+    def _build_minimax_impl(
+        *,
+        provider_config: ProviderConfig,
+        input_: VideoGenerationInput,
+        poll_interval_s: float = 2.0,
+        timeout_s: float = 120.0,
+    ) -> AbstractVideoGenerationTask:
+        return MiniMaxVideoGenerationTask(
+            provider_config=provider_config,
+            input_=input_,
+            poll_interval_s=max(10.0, poll_interval_s),
             timeout_s=timeout_s,
         )
 

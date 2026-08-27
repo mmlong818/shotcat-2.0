@@ -326,6 +326,12 @@ def test_derive_frame_preview_replaces_reference_names_with_stable_order() -> No
     assert preview.rendered_prompt.startswith(base.prompt)
     assert all(mapping.name in preview.rendered_prompt for mapping in preview.mappings)
     assert all(item not in preview.rendered_prompt for item in preview.selected_guidance)
+    assert preview.prompt_plan.visual_prompt == base.prompt
+    assert preview.prompt_plan.frame_goal == base.frame_specific_guidance
+    assert preview.prompt_plan.continuity == [base.continuity_guidance, base.screen_direction_guidance]
+    assert [item.role for item in preview.prompt_plan.reference_roles] == ["identity", "identity"]
+    assert preview.prompt_plan.reference_roles[0].name == "张三"
+    assert "外貌" in preview.prompt_plan.reference_roles[0].instruction
 
 
 def test_derive_frame_preview_prioritizes_composition_for_first_frame() -> None:

@@ -80,6 +80,14 @@ class VideoGenerationOptionsRead(BaseModel):
     model_name: str = Field(..., description="默认视频模型名称")
     allowed_ratios: list[str] = Field(default_factory=list, description="当前模型允许的比例选项")
     default_ratio: str = Field(..., description="当前模型默认比例")
+    supported_reference_modes: list[str] = Field(
+        default_factory=list,
+        description="当前模型支持的参考方式",
+    )
+    allowed_resolutions: list[str] = Field(default_factory=list, description="当前模型允许的清晰度档位")
+    default_resolution: str | None = Field(None, description="当前模型默认清晰度档位")
+    min_seconds: int | None = Field(None, description="当前模型允许的最短时长")
+    max_seconds: int | None = Field(None, description="当前模型允许的最长时长")
 
 
 class ImageGenerationOptionsRead(BaseModel):

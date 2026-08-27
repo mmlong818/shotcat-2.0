@@ -30,6 +30,9 @@ class VideoModelCapability:
     ratio_to_size_mapping: dict[str, str] | None = None
     min_seconds: int | None = 1
     max_seconds: int | None = None
+    supported_reference_modes: set[str] | None = None
+    allowed_resolutions: set[str] | None = None
+    default_resolution: str | None = None
 
 
 def register_video_model_capability(
@@ -44,24 +47,34 @@ def register_video_model_capability(
 
         register_openai_video_capability(model_prefix=model_prefix, capability=capability)
         return
-    from app.core.integrations.volcengine.video_capabilities import register_volcengine_video_capability
+    if provider == "volcengine":
+        from app.core.integrations.volcengine.video_capabilities import register_volcengine_video_capability
 
-    register_volcengine_video_capability(model_prefix=model_prefix, capability=capability)
+        register_volcengine_video_capability(model_prefix=model_prefix, capability=capability)
+        return
+    from app.core.integrations.minimax.video_capabilities import register_minimax_video_capability
+
+    register_minimax_video_capability(model_prefix=model_prefix, capability=capability)
 
 
 def clear_video_model_capability_overrides(*, provider: ProviderKey | None = None) -> None:
     """兼容入口：清空能力覆盖；供测试或重置场景使用。"""
     from app.core.integrations.openai.video_capabilities import clear_openai_video_capability_overrides
+    from app.core.integrations.minimax.video_capabilities import clear_minimax_video_capability_overrides
     from app.core.integrations.volcengine.video_capabilities import clear_volcengine_video_capability_overrides
 
     if provider is None:
         clear_openai_video_capability_overrides()
         clear_volcengine_video_capability_overrides()
+        clear_minimax_video_capability_overrides()
         return
     if provider == "openai":
         clear_openai_video_capability_overrides()
         return
-    clear_volcengine_video_capability_overrides()
+    if provider == "volcengine":
+        clear_volcengine_video_capability_overrides()
+        return
+    clear_minimax_video_capability_overrides()
 
 
 def resolve_video_capability(*, provider: ProviderKey, model: str | None) -> VideoModelCapability:
@@ -69,9 +82,13 @@ def resolve_video_capability(*, provider: ProviderKey, model: str | None) -> Vid
         from app.core.integrations.openai.video_capabilities import resolve_openai_video_capability
 
         return resolve_openai_video_capability(model)
-    from app.core.integrations.volcengine.video_capabilities import resolve_volcengine_video_capability
+    if provider == "volcengine":
+        from app.core.integrations.volcengine.video_capabilities import resolve_volcengine_video_capability
 
-    return resolve_volcengine_video_capability(model)
+        return resolve_volcengine_video_capability(model)
+    from app.core.integrations.minimax.video_capabilities import resolve_minimax_video_capability
+
+    return resolve_minimax_video_capability(model)
 
 
 def resolve_effective_ratio(input_: VideoGenerationInput) -> str | None:
@@ -109,6 +126,15 @@ def resolve_default_ratio(*, provider: ProviderKey, model: str | None) -> str | 
     return "16:9"
 
 
+def resolve_default_resolution(*, provider: ProviderKey, model: str | None) -> str | None:
+    cap = resolve_video_capability(provider=provider, model=model)
+    if cap.default_resolution:
+        return cap.default_resolution
+    if cap.allowed_resolutions:
+        return sorted(cap.allowed_resolutions)[0]
+    return None
+
+
 def derive_provider_size(
     *,
     provider: ProviderKey,
@@ -141,3 +167,9 @@ def validate_video_options(
         raise ValueError(f"seed is not supported by provider={provider} model={model or '<default>'}")
     if input_.watermark is not None and not cap.supports_watermark:
         raise ValueError(f"watermark is not supported by provider={provider} model={model or '<default>'}")
+    if input_.resolution is not None and cap.allowed_resolutions is not None:
+        if input_.resolution not in cap.allowed_resolutions:
+            raise ValueError(
+                f"Unsupported resolution for provider={provider} model={model or '<default>'}: "
+                f"{input_.resolution}. Allowed: {sorted(cap.allowed_resolutions)}"
+            )

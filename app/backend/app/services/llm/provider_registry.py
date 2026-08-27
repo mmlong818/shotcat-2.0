@@ -95,6 +95,8 @@ def resolve_provider_key_from_name(name: str) -> str:
     # 兼容历史“包含式”命名（如 Doubao Video / bytedance-xxx）。
     if "volc" in alias or "doubao" in alias or "bytedance" in alias:
         return "volcengine"
+    if "minimax" in alias or "hailuo" in alias or "海螺" in alias:
+        return "minimax"
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail=f"Unsupported provider name: {name!r}",

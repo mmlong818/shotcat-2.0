@@ -7,6 +7,7 @@ import {
   type Chapter,
   type Entity,
   type FrameTaskIndex,
+  type FramePromptPlan,
   type FrameType,
   type Project,
   type Shot,
@@ -21,6 +22,8 @@ const FRAMES: { key: FrameType; label: string }[] = [
 
 type FrameState = { fileId: string | null; busy: boolean; stage: string; error: string }
 const emptyFrame = (): FrameState => ({ fileId: null, busy: false, stage: '', error: '' })
+type FramePlanState = { loading: boolean; error: string; data: FramePromptPlan | null }
+const emptyPlan = (): FramePlanState => ({ loading: false, error: '', data: null })
 
 type FrameBatchView = { batchId: string; done: number; total: number; status: string }
 type FrameBatchItemView = {
@@ -120,6 +123,7 @@ export default function Frames({ project }: { project: Project | null }) {
   const [lb, setLb] = useState<string | null>(null)
   const [detail, setDetail] = useState<any>(null) // 镜头详情(含真实关键帧提示词)
   const [promptDrafts, setPromptDrafts] = useState<Partial<Record<FrameType, string>>>({})
+  const [promptPlans, setPromptPlans] = useState<Partial<Record<FrameType, FramePlanState>>>({})
   const [openCh, setOpenCh] = useState<Record<string, boolean>>({}) // 镜头列表按集折叠
   const [thumbs, setThumbs] = useState<Record<string, Partial<Record<FrameType, string>>>>({}) // 镜头缩略图索引
   const [batch, setBatch] = useState<FrameBatchView | null>(null)
@@ -318,12 +322,36 @@ export default function Frames({ project }: { project: Project | null }) {
     if (!sel) return
     const shotId = sel.id
     setPromptDrafts({})
+    setPromptPlans({})
     loadFrames(shotId)
     api.shotDetail(shotId).then((d) => { if (selRef.current === shotId) setDetail(d) })
   }, [sel, loadFrames])
 
   const setFrame = (ft: FrameType, patch: Partial<FrameState>) =>
     setFrames((prev) => ({ ...prev, [ft]: { ...prev[ft], ...patch } }))
+
+  const setPromptPlan = (ft: FrameType, patch: Partial<FramePlanState>) =>
+    setPromptPlans((prev) => ({ ...prev, [ft]: { ...(prev[ft] || emptyPlan()), ...patch } }))
+
+  async function previewPromptPlan(ft: FrameType) {
+    if (!sel) return
+    const shotId = sel.id
+    const prompt = String(promptDrafts[ft] ?? detail?.key_frame_prompt ?? '').trim()
+    if (!prompt) {
+      setPromptPlan(ft, { error: '请先生成或填写画面提示词。', data: null })
+      return
+    }
+    setPromptPlan(ft, { loading: true, error: '' })
+    try {
+      const refs = await api.frameRefs(shotId, project?.id)
+      const preview = await api.renderFramePrompt(shotId, ft, prompt, refs)
+      if (selRef.current !== shotId) return
+      setPromptPlan(ft, { loading: false, data: preview.prompt_plan })
+    } catch (error: any) {
+      if (selRef.current !== shotId) return
+      setPromptPlan(ft, { loading: false, error: error?.message || '生成计划解析失败', data: null })
+    }
+  }
 
   async function generate(ft: FrameType) {
     if (!sel) return
@@ -365,8 +393,9 @@ export default function Frames({ project }: { project: Project | null }) {
       // 带上镜头关联的造型图作参考图（角色→场景→道具）——跨镜一致性的关键
       const refs = await api.frameRefs(shotId, project?.id)
       const finalBasePrompt = (savedPrompt || stripReferenceLines(prompt)) + api.refGuard(refs)
-      const rendered = savedPrompt ? null : await api.renderFramePrompt(shotId, ft, finalBasePrompt, refs).catch(() => null)
+      const rendered = await api.renderFramePrompt(shotId, ft, finalBasePrompt, refs).catch(() => null)
       const finalPrompt = (rendered?.rendered_prompt || finalBasePrompt).trim()
+      if (alive() && rendered?.prompt_plan) setPromptPlan(ft, { loading: false, error: '', data: rendered.prompt_plan })
       // 仅在系统首次生成提示词时显示结果；用户已有提示词时绝不把附加约束回写到编辑框。
       if (alive() && !savedPrompt) setPromptDrafts((m) => ({ ...m, [ft]: finalPrompt }))
       if (alive()) setFrame(ft, { stage: refs.length ? `生成画面…（${refs.length} 张参考图）` : '生成画面…' })
@@ -839,6 +868,7 @@ export default function Frames({ project }: { project: Project | null }) {
                             placeholder="输入关键帧画面提示词"
                             onChange={(e) => {
                               setPromptDrafts((m) => ({ ...m, [ft]: e.target.value }))
+                              setPromptPlans((m) => ({ ...m, [ft]: emptyPlan() }))
                             }}
                             onBlur={(e) => {
                               if (!sel) return
@@ -848,6 +878,60 @@ export default function Frames({ project }: { project: Project | null }) {
                                 .catch((err) => alert(err?.message || '保存提示词失败'))
                             }}
                           />
+                          <div className="frame-plan">
+                            <div className="frame-plan-head">
+                              <div>
+                                <div className="frame-plan-title">结构化生成计划</div>
+                                <div className="frame-plan-hint">先核对参考图职责、连续性和构图，再提交生成。</div>
+                              </div>
+                              <button
+                                className="btn ghost frame-plan-action"
+                                disabled={!sel || promptPlans[ft]?.loading}
+                                onClick={() => previewPromptPlan(ft)}
+                              >
+                                {promptPlans[ft]?.loading ? '解析中…' : promptPlans[ft]?.data ? '刷新' : '预览'}
+                              </button>
+                            </div>
+                            {promptPlans[ft]?.error && <div className="frame-plan-error">{promptPlans[ft]?.error}</div>}
+                            {promptPlans[ft]?.data && (
+                              <div className="frame-plan-body">
+                                {promptPlans[ft]?.data?.frame_goal && (
+                                  <div className="frame-plan-section">
+                                    <div className="frame-plan-label">帧职责</div>
+                                    <div>{promptPlans[ft]?.data?.frame_goal}</div>
+                                  </div>
+                                )}
+                                <div className="frame-plan-section">
+                                  <div className="frame-plan-label">参考图职责</div>
+                                  {promptPlans[ft]?.data?.reference_roles.length ? (
+                                    <div className="frame-role-list">
+                                      {promptPlans[ft]?.data?.reference_roles.map((item) => (
+                                        <div className="frame-role" key={`${item.token}:${item.file_id}`}>
+                                          <span className="frame-role-tag">{item.label}</span>
+                                          <div><strong>{item.name}</strong><span>{item.instruction}</span></div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : <div className="muted">本次没有参考图，将仅按文字生成。</div>}
+                                </div>
+                                {promptPlans[ft]?.data?.composition.map((item) => (
+                                  <div className="frame-plan-section" key={`composition:${item}`}>
+                                    <div className="frame-plan-label">构图锚点</div><div>{item}</div>
+                                  </div>
+                                ))}
+                                {promptPlans[ft]?.data?.continuity.map((item, index) => (
+                                  <div className="frame-plan-section" key={`continuity:${item}`}>
+                                    <div className="frame-plan-label">{index === 0 ? '连续性' : '朝向与视线'}</div><div>{item}</div>
+                                  </div>
+                                ))}
+                                {promptPlans[ft]?.data?.director_constraints.map((item) => (
+                                  <div className="frame-plan-section" key={`director:${item}`}>
+                                    <div className="frame-plan-label">导演约束</div><div>{item}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>

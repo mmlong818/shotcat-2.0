@@ -4,7 +4,7 @@ import { api, type Project, type WorkflowInvalidation, type WorkflowRevision } f
 
 type Stats = {
   chapters: number; character: number; scene: number; prop: number; costume: number; actor: number; shots: number
-  brainTotal: number; brainConfirmed: number; framedShots: number
+  brainTotal: number; brainConfirmed: number; framedShots: number; videoShots: number
 }
 
 const STAGES: { to: string; label: string; desc: string; icon: string }[] = [
@@ -13,6 +13,7 @@ const STAGES: { to: string; label: string; desc: string; icon: string }[] = [
   { to: '/cast', label: '设定', desc: '角色/场景/道具/服装 + 造型图', icon: 'cast' },
   { to: '/board', label: '分镜', desc: '镜头级时序 · 景别机位', icon: 'board' },
   { to: '/frames', label: '画面', desc: '关键帧 · 生图', icon: 'frames' },
+  { to: '/video', label: '视频', desc: '图生视频 · 动态镜头', icon: 'video' },
   { to: '/gallery', label: '总览', desc: '全集画面一览', icon: 'gallery' },
 ]
 
@@ -23,6 +24,7 @@ function SIcon({ n }: { n: string }) {
     cast: <g><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></g>,
     board: <g><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M9 4v16" /></g>,
     frames: <g><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h4v10M17 5v14h4M7 5v4" /></g>,
+    video: <g><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m10 9 5 3-5 3z" /></g>,
     gallery: <g><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="1.6" /><path d="M3 16l5-4 4 3 4-5 5 6" /></g>,
   }
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">{p[n]}</svg>
@@ -63,9 +65,10 @@ export default function Overview({ project, onRatioChange, resumeStage }: {
         const frames = frameIndex[shot.id]
         return Boolean(frames && (frames.first || frames.key || frames.last))
       }).length
+      const videoShots = allShots.filter((shot) => Boolean(shot.generated_video_file_id)).length
       setSt({
         chapters: chs.length, character: ch.length, scene: sc.length, prop: pr.length, costume: co.length,
-        actor: ac.length, shots, brainTotal: brain.total, brainConfirmed: brain.confirmed, framedShots,
+        actor: ac.length, shots, brainTotal: brain.total, brainConfirmed: brain.confirmed, framedShots, videoShots,
       })
       setInvalidations(stale)
       setRevisions(history)
@@ -83,7 +86,8 @@ export default function Overview({ project, onRatioChange, resumeStage }: {
     : st.brainTotal === 0 || st.brainConfirmed < st.brainTotal ? '/brain'
       : st.character + st.scene + st.prop + st.costume === 0 ? '/cast'
         : st.shots === 0 ? '/board'
-          : st.framedShots < st.shots ? '/frames' : '/gallery'
+          : st.framedShots < st.shots ? '/frames'
+            : st.videoShots < st.shots ? '/video' : '/gallery'
   const activeStage = STAGES.some((stage) => stage.to === resumeStage) ? resumeStage : inferredStage
 
   const downloadRevision = async (revision: WorkflowRevision) => {
@@ -155,7 +159,8 @@ export default function Overview({ project, onRatioChange, resumeStage }: {
             const route = item.downstream_step === 'brain' ? '/brain'
               : item.downstream_step === 'cast' ? '/cast'
               : item.downstream_step === 'storyboard' ? '/board'
-              : item.downstream_step === 'frames' ? '/frames' : '/gallery'
+              : item.downstream_step === 'frames' ? '/frames'
+              : item.downstream_step === 'video' ? '/video' : '/gallery'
             return <button key={item.id} type="button" className="ov-impact-row" onClick={() => navigate(route)}>
               <span>{item.reason}</span><em>{item.affected_count} 项</em><i>前往处理 →</i>
             </button>

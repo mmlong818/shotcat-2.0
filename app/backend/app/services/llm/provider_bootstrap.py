@@ -26,6 +26,13 @@ def bootstrap_builtin_providers() -> None:
                 default_base_url="https://ark.cn-beijing.volces.com/api/v3",
             ),
             ProviderSpec(
+                key="minimax",
+                display_name="MiniMax",
+                aliases=("minimax", "海螺", "hailuo"),
+                supported_categories=(ModelCategoryKey.video,),
+                default_base_url="https://api.minimax.io",
+            ),
+            ProviderSpec(
                 key="aliyun_bailian",
                 display_name="阿里百炼",
                 aliases=("阿里百炼", "aliyun", "bailian", "dashscope"),

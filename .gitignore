@@ -63,5 +63,8 @@ bridge/*.log
 bridge/pipeline-jobs.json
 bridge/pipeline-jobs.tmp
 web/*.log
+.codex-*.log
 .tmp-openapi.json
 .test-*/
+.*test-runtime*/
+app/backend/.*test-runtime*/

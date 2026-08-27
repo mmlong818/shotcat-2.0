@@ -10,10 +10,12 @@ from app.models.llm import ModelCategoryKey
 from app.schemas.common import ApiResponse, PaginatedData, created_response, empty_response, success_response
 from app.schemas.llm import (
     ImageGenerationOptionsRead,
+    InitialModelConnection,
     InitialModelSetupRequest,
     InitialModelSetupStatusRead,
     ModelCreate,
     ModelRead,
+    ModelCapabilitySetupRead,
     ModelSettingsRead,
     ModelSettingsUpdate,
     ModelUpdate,
@@ -23,7 +25,12 @@ from app.schemas.llm import (
     VideoGenerationOptionsRead,
     ProviderUpdate,
 )
-from app.services.llm.initial_setup import get_initial_model_setup_status, save_initial_model_setup
+from app.services.llm.initial_setup import (
+    get_initial_model_setup_status,
+    get_video_model_setup_status,
+    save_initial_model_setup,
+    save_video_model_setup,
+)
 from app.services.llm.manage import (
     create_model as create_model_service,
     create_provider as create_provider_service,
@@ -81,6 +88,33 @@ async def update_initial_setup(
 
     result = await save_initial_model_setup(db, body=body)
     return success_response(result)
+
+
+@router.get(
+    "/video-setup",
+    response_model=ApiResponse[ModelCapabilitySetupRead],
+    summary="检查视频模型配置",
+)
+async def get_video_setup(
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[ModelCapabilitySetupRead]:
+    """视频能力按需启用，不阻塞文字和图片工作流。"""
+
+    return success_response(await get_video_model_setup_status(db))
+
+
+@router.put(
+    "/video-setup",
+    response_model=ApiResponse[ModelCapabilitySetupRead],
+    summary="保存视频模型配置",
+)
+async def update_video_setup(
+    body: InitialModelConnection,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[ModelCapabilitySetupRead]:
+    """保存独立的视频供应商、Key 与模型 ID。"""
+
+    return success_response(await save_video_model_setup(db, body=body))
 
 
 @router.get(

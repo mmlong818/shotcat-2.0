@@ -136,7 +136,7 @@ async def test_preview_prompt_and_images_uses_auto_frame_ids() -> None:
         )
         await db.commit()
 
-        prompt, images, pack = await preview_prompt_and_images(
+        prompt, images, pack, execution_plan = await preview_prompt_and_images(
             db,
             shot_id="s1",
             reference_mode="first_last",
@@ -150,12 +150,18 @@ async def test_preview_prompt_and_images_uses_auto_frame_ids() -> None:
         assert "下一镜头目标：" in prompt
         assert "构图锚点：" in prompt
         assert "朝向与视线：" in prompt
+        assert "视频执行计划（完整覆盖 6 秒）" in prompt
         assert images == ["f1", "f2"]
         assert pack is not None
         assert pack["camera"]["duration"] == 6
         assert pack["action_beats"]
         assert "镜头零" in pack["previous_shot_summary"]
         assert "镜头二" in pack["next_shot_goal"]
+        assert execution_plan is not None
+        assert execution_plan["generation_path"] == "first_last_i2v"
+        assert execution_plan["timeline"][0]["start_s"] == 0
+        assert execution_plan["timeline"][-1]["end_s"] == 6
+        assert [item["role"] for item in execution_plan["references"]] == ["start", "end"]
     await engine.dispose()
 
 
@@ -164,7 +170,7 @@ async def test_preview_prompt_and_images_prefers_request_images_when_provided() 
     db, engine = await _build_session()
     async with db:
         await _seed_shot_graph(db)
-        prompt, images, pack = await preview_prompt_and_images(
+        prompt, images, pack, execution_plan = await preview_prompt_and_images(
             db,
             shot_id="s1",
             reference_mode="first_last",
@@ -178,6 +184,8 @@ async def test_preview_prompt_and_images_prefers_request_images_when_provided() 
         assert images == ["manual-first", "manual-last"]
         assert pack is not None
         assert pack["camera"]["duration"] == 6
+        assert execution_plan is not None
+        assert execution_plan["references"][0]["file_id"] == "manual-first"
     await engine.dispose()
 
 

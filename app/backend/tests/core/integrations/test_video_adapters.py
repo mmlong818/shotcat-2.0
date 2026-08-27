@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.integrations.openai.video import OpenAIVideoApiAdapter
+from app.core.integrations.minimax.video import MiniMaxVideoApiAdapter
 from app.core.integrations.volcengine.video import VolcengineVideoApiAdapter
 from app.core.contracts.provider import ProviderConfig
 from app.core.contracts.video_generation import VideoGenerationInput
@@ -87,6 +88,50 @@ async def test_volcengine_video_create_and_get(monkeypatch: pytest.MonkeyPatch) 
     meta = await VolcengineVideoApiAdapter().get_contents_task(cfg=cfg, task_id=tid, timeout_s=30.0)
     assert meta["status"] == "succeeded"
     assert meta["content"]["video_url"] == "https://v.example/out.mp4"
+
+
+@pytest.mark.asyncio
+async def test_minimax_h3_video_create_and_get(monkeypatch: pytest.MonkeyPatch) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            assert str(request.url).endswith("/v2/video_generation")
+            body = json.loads(request.content.decode())
+            assert body["model"] == "MiniMax-H3"
+            assert body["duration"] == 6
+            assert body["resolution"] == "768P"
+            assert body["ratio"] == "adaptive"
+            assert [item.get("role") for item in body["content"][1:]] == ["first_frame", "last_frame"]
+            return httpx.Response(200, json={"task_id": "h3-task-1"})
+        if request.method == "GET":
+            assert str(request.url).endswith("/v2/query/video_generation/h3-task-1")
+            return httpx.Response(
+                200,
+                json={
+                    "task": {
+                        "id": "h3-task-1",
+                        "status": "succeeded",
+                        "content": {"url": "https://v.example/h3.mp4"},
+                    }
+                },
+            )
+        return httpx.Response(500)
+
+    _patch_httpx_client(monkeypatch, httpx.MockTransport(handler))
+    cfg = ProviderConfig(provider="minimax", api_key="minimax-test")
+    inp = VideoGenerationInput(
+        prompt="人物从门边走到窗前",
+        first_frame_base64="data:image/png;base64,first",
+        last_frame_base64="data:image/png;base64,last",
+        model="MiniMax-H3",
+        ratio="9:16",
+        seconds=6,
+        resolution="768P",
+    )
+    adapter = MiniMaxVideoApiAdapter()
+    task_id = await adapter.create_video(cfg=cfg, input_=inp, timeout_s=30.0)
+    assert task_id == "h3-task-1"
+    task = await adapter.get_video(cfg=cfg, task_id=task_id, timeout_s=30.0)
+    assert task["content"]["url"] == "https://v.example/h3.mp4"
 
 
 def test_video_input_seed_bounds_validation() -> None:

@@ -47,6 +47,14 @@ def _missing_status(
     )
 
 
+def _category_label(category: ModelCategoryKey) -> str:
+    return {
+        ModelCategoryKey.text: "文字",
+        ModelCategoryKey.image: "图片",
+        ModelCategoryKey.video: "视频",
+    }[category]
+
+
 async def _category_status(
     db: AsyncSession,
     *,
@@ -61,7 +69,7 @@ async def _category_status(
         return _missing_status(
             category,
             reason="missing_default_model",
-            message=f"尚未配置默认{('文字' if category == ModelCategoryKey.text else '图片')}模型",
+            message=f"尚未配置默认{_category_label(category)}模型",
         )
 
     model = await db.get(Model, model_id)
@@ -155,7 +163,7 @@ async def get_initial_model_setup_status(db: AsyncSession) -> InitialModelSetupS
 
 
 def _configured_provider_id(category: ModelCategoryKey, provider_key: str) -> str:
-    """为文字和图片保留独立供应商记录，使两者可以使用不同 Key。"""
+    """为每类模型保留独立供应商记录，使文字、图片和视频可以使用不同 Key。"""
 
     return f"startup-{category.value}-{provider_key}"[:64]
 
@@ -272,3 +280,29 @@ async def save_initial_model_setup(
     if not result.ready:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请完成文字和图片模型配置")
     return result
+
+
+async def get_video_model_setup_status(db: AsyncSession) -> ModelCapabilitySetupRead:
+    """返回可选的视频模型配置状态，不影响工作台启动门禁。"""
+
+    settings = await db.get(ModelSettings, 1)
+    return await _category_status(db, settings=settings, category=ModelCategoryKey.video)
+
+
+async def save_video_model_setup(
+    db: AsyncSession,
+    *,
+    body: InitialModelConnection,
+) -> ModelCapabilitySetupRead:
+    """保存视频模型连接并设为默认视频模型。"""
+
+    settings = await db.get(ModelSettings, 1)
+    if settings is None:
+        settings = ModelSettings(id=1)
+        db.add(settings)
+        await db.flush()
+
+    model = await _upsert_connection(db, category=ModelCategoryKey.video, connection=body)
+    settings.default_video_model_id = model.id
+    await db.flush()
+    return await get_video_model_setup_status(db)

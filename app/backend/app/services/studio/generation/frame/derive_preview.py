@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import re
 
-from app.schemas.studio.shots import FrameGuidanceDecisionRead, RenderedShotFramePromptRead, ShotFramePromptMappingRead
+from app.schemas.studio.shots import (
+    FrameGuidanceDecisionRead,
+    FramePromptPlanRead,
+    FrameReferenceRoleRead,
+    RenderedShotFramePromptRead,
+    ShotFramePromptMappingRead,
+)
 from app.services.studio.generation.frame.build_base import FrameBaseDraft
 from app.services.studio.generation.frame.build_context import FrameGenerationContext
 from app.services.studio.generation.shared.types import GenerationDerivedPreview
@@ -270,11 +276,13 @@ def _reference_relation_lines(mappings: list[ShotFramePromptMappingRead]) -> lis
         return []
     label_by_type = {
         "character": "角色参考",
+        "costume": "服装参考",
         "scene": "场景参考",
         "prop": "道具参考",
     }
     use_by_type = {
         "character": "保持外貌、发型与身份一致",
+        "costume": "保持服装轮廓、材质、颜色与配饰一致",
         "scene": "保持空间结构、材质、陈设与光线一致",
         "prop": "保持外观、尺寸、材质与文字细节一致",
     }
@@ -292,6 +300,54 @@ def _reference_relation_lines(mappings: list[ShotFramePromptMappingRead]) -> lis
         use = use_by_type.get(str(mapping.type), "保持设定一致")
         lines.append(f"{label}：{name}，{use}。")
     return lines
+
+
+_REFERENCE_ROLE_SPECS = {
+    "character": ("identity", "角色身份", "锁定外貌、发型与身份；姿态和表情服从本镜头。"),
+    "costume": ("costume", "服装造型", "锁定服装轮廓、材质、颜色与配饰。"),
+    "scene": ("environment", "场景环境", "锁定空间结构、材质、陈设与光线关系。"),
+    "prop": ("prop", "关键道具", "锁定外观、尺寸、材质与文字细节。"),
+}
+
+
+def build_frame_prompt_plan(
+    *,
+    base: FrameBaseDraft,
+    visual_prompt: str,
+    mappings: list[ShotFramePromptMappingRead],
+) -> FramePromptPlanRead:
+    reference_roles: list[FrameReferenceRoleRead] = []
+    for mapping in mappings:
+        role, label, instruction = _REFERENCE_ROLE_SPECS.get(
+            str(mapping.type),
+            ("reference", "通用参考", "保持与参考图中可见设定一致。"),
+        )
+        reference_roles.append(
+            FrameReferenceRoleRead(
+                token=mapping.token,
+                type=mapping.type,
+                name=mapping.name,
+                file_id=mapping.file_id,
+                role=role,
+                label=label,
+                instruction=instruction,
+            )
+        )
+    return FramePromptPlanRead(
+        frame_goal=(base.frame_specific_guidance or "").strip(),
+        visual_prompt=(visual_prompt or "").strip(),
+        director_constraints=[value for value in [(base.director_command_summary or "").strip()] if value],
+        continuity=[
+            value
+            for value in [
+                (base.continuity_guidance or "").strip(),
+                (base.screen_direction_guidance or "").strip(),
+            ]
+            if value
+        ],
+        composition=[value for value in [(base.composition_anchor or "").strip()] if value],
+        reference_roles=reference_roles,
+    )
 
 
 def _strip_existing_reference_lines(prompt: str) -> str:
@@ -541,6 +597,7 @@ class FrameDerivedPreview(GenerationDerivedPreview):
     frame_type: str
     base_prompt: str
     rendered_prompt: str
+    prompt_plan: FramePromptPlanRead
     selected_guidance: list[str]
     dropped_guidance: list[str]
     selected_guidance_details: list[FrameGuidanceDecisionRead]
@@ -598,6 +655,11 @@ def derive_frame_preview(
         frame_type=base.frame_type.value if hasattr(base.frame_type, "value") else str(base.frame_type),
         base_prompt=normalized_base_prompt,
         rendered_prompt=rendered_prompt,
+        prompt_plan=build_frame_prompt_plan(
+            base=base,
+            visual_prompt=normalized_base_prompt,
+            mappings=context.ordered_refs,
+        ),
         selected_guidance=selected_guidance,
         dropped_guidance=dropped_guidance,
         selected_guidance_details=selected_guidance_details,
@@ -614,6 +676,7 @@ def to_rendered_shot_frame_prompt_read(
     return RenderedShotFramePromptRead(
         base_prompt=derived.base_prompt,
         rendered_prompt=derived.rendered_prompt,
+        prompt_plan=derived.prompt_plan,
         selected_guidance=derived.selected_guidance,
         dropped_guidance=derived.dropped_guidance,
         selected_guidance_details=derived.selected_guidance_details,

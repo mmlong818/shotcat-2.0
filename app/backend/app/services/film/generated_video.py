@@ -14,6 +14,7 @@ from app.core.task_manager.types import TaskStatus
 from app.core.contracts.provider import ProviderConfig
 from app.core.contracts.video_generation import VideoGenerationInput, VideoGenerationResult
 from app.core.tasks import VideoGenerationTask
+from app.core.integrations.video_capabilities import resolve_video_capability, validate_video_options
 from app.models.llm import Model, ModelCategoryKey, ModelSettings
 from app.models.task_links import GenerationTaskLink
 from app.models.studio import FileItem, Shot, ShotDetail, ShotFrameType
@@ -80,7 +81,7 @@ async def preview_prompt_and_images(
     reference_mode: str,
     prompt: str | None,
     images: list[str] | None = None,
-) -> tuple[str, list[str], dict | None]:
+) -> tuple[str, list[str], dict | None, dict | None]:
     await validate_shot_and_duration(db, shot_id)
     base = build_video_base_draft(shot_id=shot_id, prompt=prompt)
     context = await build_video_context(
@@ -95,8 +96,14 @@ async def preview_prompt_and_images(
     prompt_preview_payload = submission.extra.get("prompt_preview")
     if isinstance(prompt_preview_payload, dict):
         pack = prompt_preview_payload.get("pack")
-        return submission.prompt, submission.images, pack if isinstance(pack, dict) else None
-    return submission.prompt, submission.images, None
+        execution_plan = prompt_preview_payload.get("execution_plan")
+        return (
+            submission.prompt,
+            submission.images,
+            pack if isinstance(pack, dict) else None,
+            execution_plan if isinstance(execution_plan, dict) else None,
+        )
+    return submission.prompt, submission.images, None, None
 
 
 async def resolve_default_video_model(db: AsyncSession) -> Model:
@@ -151,6 +158,7 @@ async def build_run_args(
     prompt: str | None,
     images: list[str],
     ratio: str | None,
+    resolution: str | None = None,
 ) -> dict:
     model = await resolve_default_video_model(db)
     provider_cfg = await load_provider_config_by_model(db, model)
@@ -170,24 +178,42 @@ async def build_run_args(
     if not final_prompt:
         raise HTTPException(status_code=400, detail="prompt is required")
 
+    capability = resolve_video_capability(provider=provider_cfg.provider, model=model.name)
+    supported_modes = capability.supported_reference_modes
+    if supported_modes is not None and reference_mode not in supported_modes:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Video reference mode {reference_mode!r} is not supported by "
+                f"provider={provider_cfg.provider} model={model.name}"
+            ),
+        )
+
     required_frames = tuple(ShotFrameType(item) for item in REQUIRED_FRAMES_BY_MODE[reference_mode])
     frame_data_urls = [await file_id_to_data_url(db, file_id=file_id) for file_id in submission.images]
     frame_map = {ft: frame_data_urls[i] for i, ft in enumerate(required_frames)}
+
+    video_input = VideoGenerationInput(
+        prompt=final_prompt,
+        first_frame_base64=frame_map.get(ShotFrameType.first),
+        last_frame_base64=frame_map.get(ShotFrameType.last),
+        key_frame_base64=frame_map.get(ShotFrameType.key),
+        model=model.name,
+        ratio=resolved_ratio,
+        seconds=shot_detail.duration,
+        resolution=_normalize_optional_text(resolution) or capability.default_resolution,
+    )
+    try:
+        validate_video_options(provider=provider_cfg.provider, model=model.name, input_=video_input)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     run_args = {
         "shot_id": shot_id,
         "provider": provider_cfg.provider,
         "api_key": provider_cfg.api_key,
         "base_url": provider_cfg.base_url,
-        "input": {
-            "prompt": final_prompt,
-            "first_frame_base64": frame_map.get(ShotFrameType.first),
-            "last_frame_base64": frame_map.get(ShotFrameType.last),
-            "key_frame_base64": frame_map.get(ShotFrameType.key),
-            "model": model.name,
-            "ratio": resolved_ratio,
-            "seconds": shot_detail.duration,
-        },
+        "input": video_input.model_dump(),
     }
     prompt_preview_payload = submission.extra.get("prompt_preview")
     if isinstance(prompt_preview_payload, dict):
