@@ -1,211 +1,318 @@
 <p align="center">
-  <img src="assets/logo.png" alt="shotcat logo" width="520">
+  <img src="assets/logo.png" alt="Shotcat Logo" width="168" />
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.0.0-C8923E" alt="版本 2.0.0">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-6B7280" alt="PolyForm Noncommercial 许可证"></a>
-  <a href="https://github.com/mmlong818/shotcat/commits/master"><img src="https://img.shields.io/github/last-commit/mmlong818/shotcat?label=last%20commit" alt="最近提交"></a>
-  <a href="https://github.com/mmlong818/shotcat/stargazers"><img src="https://img.shields.io/github/stars/mmlong818/shotcat?style=flat&label=stars" alt="GitHub Stars"></a>
-  <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white" alt="Python 3.11 以上">
-  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript 5">
+  <a href="README.md">简体中文</a> · <a href="README.en.md">English</a>
 </p>
 
 <p align="center">
-  简体中文 · <a href="README.en.md">English</a>
+  <img alt="Version" src="https://img.shields.io/badge/version-2.0.0-C8923E" />
+  <img alt="Status" src="https://img.shields.io/badge/status-active%20development-2E8B57" />
+  <img alt="Local First" src="https://img.shields.io/badge/data-local--first-4B6BFB" />
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white" />
+  <img alt="React" src="https://img.shields.io/badge/React-18-149ECA?logo=react&logoColor=white" />
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" />
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-EF4444" /></a>
+  <a href="https://github.com/mmlong818/shotcat"><img alt="Shotcat 1.x Stars" src="https://img.shields.io/github/stars/mmlong818/shotcat?style=flat&label=Shotcat%201.x%20stars" /></a>
 </p>
 
-# shotcat
+# Shotcat 2.0
 
-面向短剧、漫剧和剧情图像制作的本地工作台。`plotcat` 负责剧本创作，`shotcat` 负责把剧本转化为可确认、可追踪、可批量生成的角色、场景、道具、分镜与关键帧。
+Shotcat 2.0 是一个本地优先的 AI 漫剧、短剧与影视预演工作台。它把项目理解、设定管理、分镜设计、画面提示词、关键帧生成和图生视频串成一条可恢复、可审阅、可修正的生产流程。
 
-当前版本：**2.0.0（独立开发版）**
+它不是一次性“生成整部作品”的黑盒。每个阶段都有明确输入、可检查的中间结果、版本记录和任务状态；角色、场景、道具、造型等资产会以稳定引用进入后续分镜、画面和视频任务。
 
-## 产品界面
+> Shotcat 2.0 与 [Shotcat 1.x](https://github.com/mmlong818/shotcat) 分开开发。1.x 的 Star 历史保留在原仓库；2.0 不会覆盖原项目代码或本地数据。
 
-所有截图均来自当前 `web/` 工作台的真实项目与实际生成结果。
+## 2.0 的核心变化
 
-### 项目总览
+- **项目大脑**：把原文事实、用户决定和 AI 推断分开保存，支持确认、否决、锁定和重新分析。
+- **一致性资产链**：角色、造型、场景、道具可生成、上传、重命名、采用和锁定，并在后续任务中按 ID 引用。
+- **导演式分镜**：先落地完整草稿，再执行导演检查；确认问题后只修正对应镜头，黑屏、空镜和转场镜头均可合法存在。
+- **Prompt-as-Code**：画面提示词拆成主体、动作、构图、镜头、光线、连续性、参考图角色和负向约束，方便审阅与复用。
+- **视频工作台**：独立配置视频模型，支持首帧、尾帧、首尾帧、关键帧和纯文本等模式，并先展示可编辑的执行计划。
+- **持久任务中心**：页面切换或刷新后仍可恢复进度；任务支持取消、失败重试和结果回填。
+- **可回退版本**：项目概览集中展示阶段完成度、版本快照和恢复入口。
+- **双主题界面**：所有主要工作页支持浅色和深色显示。
 
-![项目总览](docs/assets/readme/overview-2026-08-09.png)
+## 完整工作流
 
-### 角色与派生状态
-
-![角色与派生状态](docs/assets/readme/cast-2026-08-09.png)
-
-### 镜头级分镜
-
-![镜头级分镜](docs/assets/readme/storyboard-2026-08-09.png)
-
-### 关键帧画面工作台
-
-![关键帧画面工作台](docs/assets/readme/frames-2026-08-09.png)
-
-## 当前工作流
-
-```text
-项目与剧本
-  -> 全文分析、类别提取与资产去重
-  -> 角色 / 场景 / 道具基准设定与派生状态
-  -> AI 拆镜头、导演校验与定向修正
-  -> 镜头提示词与参考图约束
-  -> 关键帧单张或批量生成
-  -> 全集总览与打包导出
+```mermaid
+flowchart LR
+    A[创建或打开项目] --> B[剧本导入与分集]
+    B --> C[项目大脑\n全文理解与创作决策]
+    C --> D[设定\n角色·造型·场景·道具]
+    D --> E[分镜\n镜头草稿与导演检查]
+    E --> F[画面\n提示词计划与关键帧]
+    F --> G[视频\n运动计划与图生视频]
+    G --> H[总览\n审阅与资产汇总]
+    I[任务中心与版本记录] -.贯穿.-> B
+    I -.贯穿.-> D
+    I -.贯穿.-> E
+    I -.贯穿.-> F
+    I -.贯穿.-> G
 ```
 
-### 剧本与设定
+新建项目会直接进入“剧本”，让用户从素材开始；再次打开已有项目时会进入“项目概览”，同时标出上次尚未完成的阶段。
 
-- 从全文提取角色、场景、道具和章节信息，先按类别分析与去重，再判断是否需要派生状态。
-- 同一角色的年龄、身份和妆造变化使用“基准造型 + 派生状态”管理，避免重复创建近似资产。
-- 场景结构和关键道具状态只在产生真实视觉差异时拆分；晨昏、天气和轻微变化由镜头提示词处理。
-- 设定图支持参考图约束、批量生成、停止任务、刷新恢复和批量导出。
+## 界面预览
 
-### 分镜设计
+以下为 2.0 工作台的代表性截图。界面会随开发持续调整，实际功能以当前代码为准。
 
-- 分镜生成采用“初稿 + 导演校验”两轮流程，原文逐字覆盖后再落地镜头。
-- 每个场景记录固定空间结构、观看方向、可视范围、人物位置、姿态、朝向和视线。
-- 没有明确移动或姿态变化时，后镜自动继承前镜状态，避免人物和空间无故漂移。
-- 相邻镜头记录动作匹配、视线匹配、视觉重心、因果或反应关系，不再逐句机械配图。
-- 导演发现关键问题时先保留完整草稿，再等待用户确认并只修正对应镜头；切换页面不会取消任务。
-- 黑场是合法镜头；对白说话者、听者和台词内容分别保存。
-
-### 画面生成
-
-- 每个镜头使用一张可编辑的关键帧提示词，只描述当前图片真实可见的静态内容。
-- 角色身份设定与逐镜姿态分开，场景固定结构与当前机位分开，降低跨镜头漂移。
-- 关键帧自动关联当前镜头使用的角色、场景和道具参考图。
-- 背对镜头或被遮挡的角色不会被要求表现不可见的表情；远景不会依赖瞳孔、泪痕等细节传递剧情。
-- 支持单镜生成、整集批量生成、实时执行概况、停止任务、刷新恢复和关键帧打包导出。
-- 批量任务中每个镜头完成后会立即刷新缩略图和当前画面，不必等待整批结束。
-
-当前日常流程以关键帧交付为终点。视频生成能力保留在后端，但不是完成图像工作流的前置条件。
-
-## 统一入口与本地数据
-
-日常制作统一使用 `web/` 工作台：<http://127.0.0.1:5273>。它是当前产品界面，也是功能验证和反馈的唯一页面基准。
-
-`app/front/` 是旧 Studio 管理界面，默认端口 `7788`，仅用于维护和历史兼容，不能作为当前工作台的页面比对基准。
-
-项目数据、生成图片和密钥默认只保存在本机：
-
-- 数据库：`app/backend/jellyfish.db`
-- 生成文件：`app/backend/local-storage/`
-- 环境配置：`app/backend/.env`
-
-Git 只同步代码和文档，不同步这些本地内容。迁移到另一台机器时，需要单独备份数据库与生成文件。
-
-## 目录
-
-| 目录 | 用途 |
+| 项目概览 | 设定资产 |
 | --- | --- |
-| `web/` | 当前日常制作工作台，默认端口 `5273`。 |
-| `app/backend/` | FastAPI API、SQLite 数据、任务队列、资产、分镜与图片生成。 |
-| `bridge/` | 剧本分析、设定抽取、视觉词典、AI 拆镜头和 Pipeline 服务。 |
-| `app/front/` | 旧 Studio 管理前端，仅用于维护与历史兼容。 |
-| `docs/assets/readme/` | README 使用的版本化产品截图。 |
+| ![项目概览](docs/assets/readme/overview-2026-08-09.png) | ![设定资产](docs/assets/readme/cast-2026-08-09.png) |
 
-## 本地启动
+| 分镜设计 | 画面生成 |
+| --- | --- |
+| ![分镜设计](docs/assets/readme/storyboard-2026-08-09.png) | ![画面生成](docs/assets/readme/frames-2026-08-09.png) |
 
-### 前置条件
+## 能力总览
 
-- Python 3.11+
-- Node.js 18+ 与 pnpm
-- 可用的图像模型 API；文字 Pipeline 可使用外部 API，也可复用本机已登录的 Codex
-- 可选：Redis 与 Celery Worker。未配置时任务会回退到后端本地执行。
+| 阶段 | 主要输入 | 主要产出 | 可控内容 |
+| --- | --- | --- | --- |
+| 项目 | 名称、类型、比例、素材 | 项目容器、进度、版本 | 创建、打开、归档、恢复 |
+| 剧本 | 文本或文件 | 分集、场次、对白与动作 | 编辑、重新解析、来源保留 |
+| 大脑 | 全文剧本、创作要求 | 世界观、人物关系、主题、事实与推断 | 确认、否决、锁定、重分析 |
+| 设定 | 剧本实体、用户参考图 | 角色、造型、场景、道具资产 | 上传、命名、生成、采用、锁定、删除影响检查 |
+| 分镜 | 场次、资产、导演规则 | 有连续关系的镜头列表 | 拆镜、镜头语言、导演校验、定点修正 |
+| 画面 | 镜头和资产引用 | 结构化提示词、关键帧图片 | 构图、连续性、参考图角色、单张或批量生成 |
+| 视频 | 关键帧、镜头动作、视频模型 | 运动计划、视频片段、任务状态 | 首尾帧策略、时长、分辨率、提示词、取消 |
+| 总览 | 全部已落地资产 | 项目级审阅视图 | 汇总检查与回到来源阶段 |
+
+## 关键设计
+
+### 项目大脑：先区分事实，再做创作
+
+项目大脑不会把所有 AI 输出都当成事实。每条知识都有来源和状态：
+
+- **来源**：原文、用户输入或 AI 推断。
+- **状态**：草稿、已确认或已否决。
+- **锁定**：锁定内容不会被后续重新分析自动覆盖。
+
+这让重新抽取设定、修改剧本或重跑某一步时，不会悄悄抹掉已经确认的创作决定。
+
+### 设定资产：稳定引用而不是只看缩略图
+
+角色、造型、场景和道具都作为独立资产保存。用户可以直接上传认可的设计稿、自行命名并设为正式版本。分镜和画面任务引用资产记录，而不是依赖临时文件名，因此重命名、切换版本或重新生成后仍能保持关联。
+
+删除资产前会检查使用关系，并说明会影响哪些下游内容。确认级联删除后，相关引用和派生结果会一并处理，避免留下失效的镜头或提示词。
+
+### 分镜：先保存，再校验，再定点修正
+
+一次完整拆镜遵循以下顺序：
+
+1. 先生成并保存完整镜头草稿。
+2. 导演规则检查景别、机位、运动、轴线、节奏、对白归属和镜头连续性。
+3. 如果发现问题，显示具体镜头与原因。
+4. 用户确认后自动开始修正，只覆盖被点名的镜头。
+5. 保留未受影响镜头以及可恢复的任务、版本记录。
+
+规则允许黑屏、空镜、字幕、声音先行等叙事镜头，不会为了“每个镜头都必须有人物画面”而错误填充内容。
+
+### 画面：结构化提示词与连续性计划
+
+每个镜头的画面任务会先产生可审阅计划，再调用图像模型。计划包含：
+
+- 主体身份与当前造型；
+- 场景、时间、天气和光线；
+- 动作、表情、视线和空间位置；
+- 景别、角度、镜头焦段、构图和景深；
+- 与前后镜头衔接的连续性约束；
+- 角色图、造型图、场景图、道具图的参考角色；
+- 模型不应生成的负向约束。
+
+OpenAI `gpt-image-2` 路径会把真实参考图字节作为重复的 `image[]` multipart 字段发送，不把 Shotcat 内部文件 ID 当作图像内容。
+
+### 视频：图像之后的独立生产阶段
+
+视频页以镜头为单位组织任务。用户可以选择可用模型、参考帧方式、分辨率和时长，检查系统生成的运动计划，再编辑最终提示词并执行。
+
+计划会明确展示：
+
+- 起始与结束画面状态；
+- 人物动作、摄影机运动与节奏；
+- 首帧、尾帧和关键帧分别承担什么作用；
+- 时间线分段和音频处理建议；
+- 模型能力不匹配时的警告。
+
+当前 MiniMax H3 适配支持纯文本、首帧、尾帧、首尾帧和关键帧模式，支持 768P / 2K、4–15 秒；不支持同时使用“首帧 + 尾帧 + 关键帧”，也不把 seed 或 watermark 作为可用控制项。
+
+> “已适配”表示代码中已有供应商调用和能力约束，不代表你的账号已开通对应模型，也不代表付费调用已经在本机完成验证。
+
+## 模型与供应商
+
+Shotcat 把文字、图像和视频模型分开配置，不要求三类任务使用同一家供应商。
+
+| 能力 | 内置供应商适配 | 说明 |
+| --- | --- | --- |
+| 文字 | OpenAI、阿里云百炼、本机 Codex 管线 | 用于剧本理解、设定、分镜、提示词和计划 |
+| 图像 | OpenAI、火山引擎 | 用于设定稿和镜头关键帧 |
+| 视频 | OpenAI、火山引擎、MiniMax | 用于按镜头生成视频片段 |
+
+首次启动若没有可用文字或图像模型，应用会引导输入供应商、模型 ID、接口地址和 Key。视频模型在“视频”页独立配置。配置保存在本机数据库中，不应提交到 Git。
+
+供应商模型名称、权限和计费会变化。界面中的模型 ID 应以你的供应商控制台为准；仓库提供的是接入能力，不附带 Key、额度或模型授权。
+
+## 本地优先与数据位置
+
+默认情况下，项目数据和生成结果保存在本机：
+
+| 数据 | 默认位置 |
+| --- | --- |
+| 业务数据库 | `app/backend/jellyfish.db` |
+| 图片、视频和上传文件 | `app/backend/local-storage/` |
+| 后端私密配置 | `app/backend/.env` |
+| Pipeline 任务快照 | `bridge/pipeline-jobs.json` |
+| 页面偏好与少量任务引用 | 浏览器本地存储 |
+
+后端任务记录是生成状态的主要来源，刷新页面或切换阶段后会重新读取，因此运行中、完成、失败和已取消状态不会只存在于当前页面内存。
+
+可选的 S3、Redis 和 Celery 配置用于外部存储或队列；未配置时使用本地文件和本地执行路径。调用外部 AI 模型时，相关提示词和参考素材会发送给你选择的供应商，请按供应商的数据政策使用。
+
+## 系统结构
+
+```mermaid
+flowchart TB
+    UI[web\nReact + TypeScript + Vite]
+    API[app/backend\nFastAPI + SQLite]
+    PIPE[bridge\n可恢复的 AI Pipeline 服务]
+    FILES[(local-storage)]
+    DB[(jellyfish.db)]
+    TEXT[文字模型]
+    IMAGE[图像模型]
+    VIDEO[视频模型]
+    CODEX[本机 Codex CLI]
+
+    UI -->|/api| API
+    UI -->|/pipeline| PIPE
+    API --> DB
+    API --> FILES
+    API --> TEXT
+    API --> IMAGE
+    API --> VIDEO
+    PIPE --> CODEX
+    PIPE --> TEXT
+```
+
+```text
+shotcat-2.0/
+├─ web/                    # 当前 React 工作台
+├─ app/
+│  ├─ backend/            # FastAPI、数据库、任务与模型适配
+│  └─ front/              # 旧版前端，仅用于兼容和参考
+├─ bridge/                 # 分镜等长任务的可恢复 Pipeline 服务
+├─ docs/assets/readme/     # README 截图
+├─ assets/                 # Logo 等仓库资源
+├─ README.md               # 中文说明
+└─ README.en.md            # English documentation
+```
+
+## 本机启动
+
+以下命令以 Windows PowerShell 为例。建议使用三个终端分别运行后端、Pipeline 和前端。
 
 ### 1. 启动后端
 
-```bash
-cd app/backend
-cp .env.example .env
-uv sync --group dev
+需要 Python 3.11+；推荐 Python 3.12 和 [uv](https://docs.astral.sh/uv/)。
+
+```powershell
+cd E:\codex\shotcat-2.0\app\backend
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+uv sync --python 3.12 --group dev
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-- API：<http://127.0.0.1:8000>
-- 接口文档：<http://127.0.0.1:8000/docs>
+数据库会在启动时自动初始化。验证地址：
 
-需要独立 Worker 时，另开终端：
+- 健康检查：<http://127.0.0.1:8000/health>
+- API 文档：<http://127.0.0.1:8000/docs>
 
-```bash
-cd app/backend
-uv run celery -A app.core.celery_app.celery_app worker --loglevel=INFO
-```
+### 2. 启动 Pipeline
 
-### 2. 启动 Pipeline 服务
-
-设定抽取、视觉词典和 AI 拆镜头依赖该服务：
-
-```bash
-cd bridge
-python pipeline_server.py
-```
-
-服务地址：<http://127.0.0.1:5280>
-
-如需让设定抽取、项目大脑和 AI 拆镜头复用本机 Codex 登录，在启动 Pipeline 前设置：
+Pipeline 负责可恢复的长流程任务。使用本机已登录的 Codex 作为文字提供方时：
 
 ```powershell
-$env:SHOTCAT_TEXT_PROVIDER="codex"
+cd E:\codex\shotcat-2.0\bridge
+$env:SHOTCAT_TEXT_PROVIDER = "codex"
+# 可选：$env:SHOTCAT_CODEX_MODEL = "你的可用模型"
 python pipeline_server.py
 ```
 
-可选的 `SHOTCAT_CODEX_MODEL` 用于固定 Codex 模型；留空时沿用当前 Codex 默认模型。该方式只负责文字任务，图像生成仍需单独配置图像供应商。
+默认监听 `http://127.0.0.1:5280`。若不设置 `SHOTCAT_TEXT_PROVIDER`，请按本机已有供应商配置运行。
 
-### 3. 启动工作台
+### 3. 启动前端
 
-```bash
-cd web
-pnpm install
-pnpm dev
+```powershell
+cd E:\codex\shotcat-2.0\web
+corepack pnpm install
+corepack pnpm dev
 ```
 
-访问：<http://127.0.0.1:5273>
+打开 <http://127.0.0.1:5273>。
 
-首次打开时，若数据库中没有可用模型，工作台会要求分别填写文字模型和图像模型连接。供应商、模型 ID、API 地址和 Key 可以分别配置，真实 Key 不应提交到仓库。Bridge 使用 Codex 时也不会读取或保存 Codex 凭证，只调用本机已登录的 Codex CLI。
+### 使用其他端口
 
-## 使用顺序
+```powershell
+# 后端终端
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8010
 
-1. 在作品库填写创作简报并新建项目，再到剧本页填写章节正文；简报会成为已锁定的项目规则。
-2. 运行“抽取设定”，检查全文分析后的角色、场景和道具分类。
-3. 在设定页确认基准资产与派生状态，完善描述并生成参考图。
-4. 在分镜页运行“AI 拆镜头”，查看导演校验结果并确认必要修正。
-5. 点击“批量生成本集画面”进入画面工作台，观察每个镜头的提示词与图像生成状态。
-6. 检查关键帧、参考图关系和提示词，按需单镜重生成或停止任务。
-7. 在画面工作台或总览页批量导出关键帧。
+# Pipeline 终端
+$env:SHOTCAT_PIPELINE_PORT = "8020"
+python pipeline_server.py
 
-## 开发与验证
-
-当前工作台类型检查与构建：
-
-```bash
-cd web
-pnpm exec tsc -b
-pnpm build
+# 前端终端
+$env:SHOTCAT_API_TARGET = "http://127.0.0.1:8010"
+$env:SHOTCAT_PIPELINE_TARGET = "http://127.0.0.1:8020"
+corepack pnpm exec vite --host 127.0.0.1 --port 8030
 ```
 
-后端测试：
+## 第一次使用
 
-```bash
-cd app/backend
+1. 创建项目，设置名称、画面比例和基础信息。
+2. 在“剧本”导入或粘贴文本，并确认分集、场次和对白解析。
+3. 若出现模型配置引导，分别填写文字和图像模型；视频模型可稍后在视频页配置。
+4. 在“项目大脑”确认核心事实、人物关系和创作决定。
+5. 在“设定”检查角色、造型、场景和道具，上传或生成正式参考图并锁定。
+6. 在“分镜”先执行 AI 拆镜，完成导演检查和必要修正。
+7. 在“画面”检查每个镜头的提示词计划，再生成关键帧。
+8. 在“视频”检查运动计划和参考帧，再生成镜头视频。
+9. 在任务中心查看总体进度；需要时取消任务、重试失败项或恢复旧版本。
+
+## 开发验证
+
+```powershell
+# 后端测试
+cd E:\codex\shotcat-2.0\app\backend
 uv run pytest -q
+
+# Pipeline 测试（复用后端开发环境）
+cd E:\codex\shotcat-2.0
+.\app\backend\.venv\Scripts\python.exe -m pytest bridge -q
+
+# 前端生产构建
+cd E:\codex\shotcat-2.0\web
+corepack pnpm build
 ```
 
-Bridge 规则测试：
+测试和构建通过只能证明本地代码路径可运行；真实生图、视频质量、调用速度和费用仍取决于所选模型、账号权限、网络和供应商状态。
 
-```bash
-pytest bridge -q
-```
+## 当前边界
 
-旧 Studio 后端 API 变更后，如仍需维护 `app/front/`，再同步其 OpenAPI 客户端：
+- 仓库不包含任何模型 Key、付费额度或第三方账号权限。
+- 视频阶段当前以“按镜头生成片段”为核心，不等同于完整的非线性剪辑、配音、混音和成片封装系统。
+- `app/front` 是旧版界面；日常开发和使用以 `web` 为准。
+- 项目仍处于积极开发期，数据库结构或局部交互可能在升级前发生变化；重要项目请备份数据库和 `local-storage`。
 
-```bash
-cd app/front
-pnpm run openapi:update
-```
+## 安全与隐私
+
+- 不要把 `.env`、数据库、Key、Cookie 或本地生成素材提交到公开仓库。
+- 公开问题报告前请检查截图、日志、提示词和素材是否包含私人内容。
+- 只在可信网络中暴露服务；默认的 `127.0.0.1` 监听不会主动开放到局域网。
 
 ## 许可证
 
-[PolyForm Noncommercial 1.0.0](LICENSE)。允许个人使用、学习、修改和非商业分发；不允许商业用途。
+Shotcat 2.0 使用 [PolyForm Noncommercial License 1.0.0](LICENSE)。个人学习、研究和非商业用途可按许可证使用；商业使用需另行获得授权。
 
-Copyright © 2026 猫叔
+Copyright © 2026 猫叔。
